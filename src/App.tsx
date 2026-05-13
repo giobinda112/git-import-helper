@@ -425,7 +425,7 @@ function App() {
 
   const fixtureCounts: Record<string, number> = {};
   for (const f of (fixturesWithDynamicArea || [])) {
-    if (!f.archived) fixtureCounts[f.area] = (fixtureCounts[f.area] || 0) + 1;
+    if (!f.archived && f.status !== 'FAILED') fixtureCounts[f.area] = (fixtureCounts[f.area] || 0) + 1;
   }
 
   const isDark = theme === 'dark';
