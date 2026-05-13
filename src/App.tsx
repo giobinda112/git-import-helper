@@ -348,8 +348,8 @@ function App() {
         const failedRow: Fixture = { ...original, status: 'FAILED', editHistory: [...original.editHistory, edit] };
         const prevVessel = original.vessel || '';
         const appendedComment = original.comments
-          ? `${original.comments} | FAILED (${prevVessel})`
-          : `FAILED (${prevVessel})`;
+          ? `${original.comments} | FAILED ${prevVessel}`
+          : `FAILED ${prevVessel}`;
         const copy: Fixture = {
           id: generateId(), dateAdded: todayISO(),
           charterers: original.charterers, qty: original.qty,
