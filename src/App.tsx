@@ -3,7 +3,7 @@ import type { Fixture, Anagrafiche, Area, SyncData, FieldEdit, VesselOnSubsEntry
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useTheme } from './hooks/useTheme';
 import { useSync } from './hooks/useSync';
-import { getDefaultPortMappings, detectArea, normalizePortKey } from './utils/areaMapper';
+import { getDefaultPortMappings, detectArea, normalizePortKey, canonicalArea } from './utils/areaMapper';
 import { normalizeMasterPortsList, normalizeMasterVesselsList, pickSafeAnagraficheFromServer } from './utils/sheetsSyncNormalize';
 import { fixturesForGoogleSheetSync, normalizeFixtureAfterPull } from './utils/fixtureSheetNormalize';
 import { uniqueSorted, generateId, todayISO } from './utils/helpers';
