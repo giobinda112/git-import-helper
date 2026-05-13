@@ -21,15 +21,16 @@ export function normalizeVesselOwnerRow(row: unknown): VesselOwner | null {
   };
 }
 
-/** Map sheet rows (portName or legacy name) to app model. */
+/** Map sheet rows (portName / Port / name / Port name) to app model. */
 export function normalizePortMappingRow(row: unknown): PortMapping | null {
   if (!row || typeof row !== 'object') return null;
   const o = row as Record<string, unknown>;
   const portName = String(
-    o.portName ?? o.name ?? (o as Record<string, string>)['Port name'] ?? '',
+    o.portName ?? o.Port ?? o.port ?? o.name ??
+    (o as Record<string, string>)['Port name'] ?? (o as Record<string, string>)['Port Name'] ?? '',
   ).trim();
   if (!portName) return null;
-  const raw = String(o.area ?? 'Other');
+  const raw = String(o.area ?? o.Area ?? 'Other');
   const area: Area = isArea(raw) ? raw : 'Other';
   return { portName, area };
 }
