@@ -1,5 +1,4 @@
 import { ALL_AREAS } from '../utils/areaMapper';
-import type { Area } from '../types';
 
 interface SidebarProps {
   selectedArea: string | null;

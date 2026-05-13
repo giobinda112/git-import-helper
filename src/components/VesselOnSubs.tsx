@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import type { Anagrafiche, Area, DwtCategory, VesselOnSubsEntry } from '../types';
+import type { Anagrafiche, DwtCategory, VesselOnSubsEntry } from '../types';
 import { getDwtCategory } from '../types';
 import { todayISO } from '../utils/helpers';
 import { detectArea } from '../utils/areaMapper';
@@ -41,8 +41,8 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
     const openDate = newOpenDate.trim().toUpperCase();
     if (!vessel || !port || !openDate) return;
 
-    const vo = anagrafiche.vesselOwners.find(v => v.vesselName === vessel);
-    const area = detectArea(port.split('-')[0]?.trim() || port, anagrafiche.portMappings) || 'Other';
+    void anagrafiche.vesselOwners.find(v => v.vesselName === vessel);
+    void (detectArea(port.split('-')[0]?.trim() || port, anagrafiche.portMappings) || 'Other');
     const entry: VesselOnSubsEntry = {
       id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       vessel,
