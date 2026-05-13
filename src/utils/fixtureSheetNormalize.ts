@@ -74,7 +74,7 @@ export function normalizeFixtureAfterPull(raw: Record<string, unknown>): Fixture
     comments: String(raw.comments ?? ''),
     position: String(raw.position ?? ''),
     openDate: String(raw.openDate ?? ''),
-    editHistory,
+    editHistory: editHistory as FieldEdit[],
     archived: Boolean(raw.archived),
     private: Boolean(raw.private),
   };
