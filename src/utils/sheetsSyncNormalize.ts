@@ -26,8 +26,7 @@ export function normalizePortMappingRow(row: unknown): PortMapping | null {
     (o as Record<string, string>)['Port name'] ?? (o as Record<string, string>)['Port Name'] ?? '',
   ).trim();
   if (!portName) return null;
-  const raw = String(o.area ?? o.Area ?? 'Other');
-  const area: Area = isArea(raw) ? raw : 'Other';
+  const area: Area = canonicalArea(o.area ?? o.Area ?? 'Other');
   return { portName, area };
 }
 
