@@ -92,7 +92,19 @@ function App() {
     try {
       if (data.fixtures !== undefined && data.fixtures !== null) {
         const rows = Array.isArray(data.fixtures) ? data.fixtures : [];
-        setFixtures(rows.map(f => normalizeFixtureAfterPull(f as Record<string, unknown>)));
+        const normalized = rows.map(f => normalizeFixtureAfterPull(f as unknown as Record<string, unknown>));
+        setFixtures(prev => {
+          const local = prev || [];
+          // Protection: never wipe local with empty payload (likely fetch/parse failure or sheet still recalculating)
+          if (normalized.length === 0 && local.length > 0) {
+            console.log('[sync] Empty fixtures from server — keeping local data');
+            return local;
+          }
+          // Merge: keep any local row not present on server (newly POSTed rows the sheet has not yet echoed back)
+          const serverIds = new Set(normalized.map(f => f.id));
+          const localOnly = local.filter(f => !serverIds.has(f.id));
+          return [...localOnly, ...normalized];
+        });
       }
       if (data.masterVessels != null || data.masterPorts != null || data.anagrafiche) {
         setAnagrafiche(prev => {
@@ -327,6 +339,29 @@ function App() {
   }
 
   function inlineEditFixture(fixtureId: string, field: string, newValue: string) {
+    // FAILED status via inline edit: lock current row + duplicate as fresh open cargo
+    if (field === 'status' && newValue === 'FAILED') {
+      const original = (fixtures || []).find(f => f.id === fixtureId);
+      if (original && original.status !== 'FAILED') {
+        const edit: FieldEdit = { field: 'status', oldValue: original.status, newValue: 'FAILED', editedAt: todayISO() };
+        const failedRow: Fixture = { ...original, status: 'FAILED', editHistory: [...original.editHistory, edit] };
+        const prevVessel = original.vessel || '';
+        const appendedComment = original.comments
+          ? `${original.comments} | FAILED (${prevVessel})`
+          : `FAILED (${prevVessel})`;
+        const copy: Fixture = {
+          id: generateId(), dateAdded: todayISO(),
+          charterers: original.charterers, qty: original.qty,
+          loadPort: original.loadPort, dischargePort: original.dischargePort,
+          laycan: original.laycan, vessel: '', rate: '', status: '', grade: original.grade,
+          area: original.area, dem: original.dem,
+          comments: appendedComment,
+          position: '', openDate: '', editHistory: [], archived: false, private: false,
+        };
+        setFixtures(prev => [copy, ...(prev || []).map(f => f.id === fixtureId ? failedRow : f)]);
+        return;
+      }
+    }
     setFixtures(prev => (prev || []).map(f => {
       if (f.id !== fixtureId) return f;
       const oldValue = (f as unknown as Record<string, unknown>)[field] as string;
