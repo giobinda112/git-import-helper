@@ -3,7 +3,7 @@ import type { Fixture, Anagrafiche, Area, SyncData, FieldEdit, VesselOnSubsEntry
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useTheme } from './hooks/useTheme';
 import { useSync } from './hooks/useSync';
-import { getDefaultPortMappings, detectArea, normalizePortKey } from './utils/areaMapper';
+import { getDefaultPortMappings, detectArea, normalizePortKey, canonicalArea } from './utils/areaMapper';
 import { normalizeMasterPortsList, normalizeMasterVesselsList, pickSafeAnagraficheFromServer } from './utils/sheetsSyncNormalize';
 import { fixturesForGoogleSheetSync, normalizeFixtureAfterPull } from './utils/fixtureSheetNormalize';
 import { uniqueSorted, generateId, todayISO } from './utils/helpers';
@@ -164,7 +164,8 @@ function App() {
     return (fixtures || []).map(f => {
       const firstLoadPort = f.loadPort?.split('-')[0]?.trim() || '';
       const dynamicArea = detectArea(firstLoadPort, anagrafiche?.portMappings || []);
-      return { ...f, area: dynamicArea || f.area || 'Other' };
+      const resolved = dynamicArea || f.area || 'Other';
+      return { ...f, area: canonicalArea(resolved) };
     });
   }, [fixtures, anagrafiche?.portMappings]);
 
@@ -326,7 +327,7 @@ function App() {
         loadPort: updated.loadPort, dischargePort: updated.dischargePort,
         laycan: updated.laycan, vessel: '', rate: '', status: '', grade: '',
         area: updated.area, dem: updated.dem,
-        comments: `FAILED - ${original.vessel} - ${original.rate}`,
+        comments: `FAILED ${original.vessel}`,
         position: '', openDate: '', editHistory: [], archived: false, private: false,
       };
       setFixtures(prev => [copy, ...(prev || []).map(f => f.id === updated.id ? archived : f)]);
@@ -347,8 +348,8 @@ function App() {
         const failedRow: Fixture = { ...original, status: 'FAILED', editHistory: [...original.editHistory, edit] };
         const prevVessel = original.vessel || '';
         const appendedComment = original.comments
-          ? `${original.comments} | FAILED (${prevVessel})`
-          : `FAILED (${prevVessel})`;
+          ? `${original.comments} | FAILED ${prevVessel}`
+          : `FAILED ${prevVessel}`;
         const copy: Fixture = {
           id: generateId(), dateAdded: todayISO(),
           charterers: original.charterers, qty: original.qty,
@@ -424,7 +425,7 @@ function App() {
 
   const fixtureCounts: Record<string, number> = {};
   for (const f of (fixturesWithDynamicArea || [])) {
-    if (!f.archived) fixtureCounts[f.area] = (fixtureCounts[f.area] || 0) + 1;
+    if (!f.archived && f.status !== 'FAILED') fixtureCounts[f.area] = (fixtureCounts[f.area] || 0) + 1;
   }
 
   const isDark = theme === 'dark';
@@ -481,7 +482,7 @@ function App() {
       />
 
       <div className="flex flex-1 overflow-hidden relative">
-        <Sidebar selectedArea={selectedArea} onSelectArea={setSelectedArea} fixtureCounts={fixtureCounts} totalFixtures={(fixturesWithDynamicArea || []).filter(f => !f.archived).length} />
+        <Sidebar selectedArea={selectedArea} onSelectArea={setSelectedArea} fixtureCounts={fixtureCounts} totalFixtures={(fixturesWithDynamicArea || []).filter(f => !f.archived && f.status !== 'FAILED').length} />
         <FixturesTable
           fixtures={fixturesWithDynamicArea} anagrafiche={anagrafiche} selectedArea={selectedArea} searchQuery={searchQuery}
           onDelete={deleteFixture} onEdit={setEditingFixture} onInlineEdit={inlineEditFixture}

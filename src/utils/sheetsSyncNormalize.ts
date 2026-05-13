@@ -1,9 +1,5 @@
 import type { Anagrafiche, Area, PortMapping, VesselOwner } from '../types';
-import { ALL_AREAS } from './areaMapper';
-
-function isArea(a: string): a is Area {
-  return (ALL_AREAS as readonly string[]).includes(a as Area);
-}
+import { canonicalArea } from './areaMapper';
 
 /** Map sheet rows (vesselName or legacy name) to app model. */
 export function normalizeVesselOwnerRow(row: unknown): VesselOwner | null {
@@ -30,8 +26,7 @@ export function normalizePortMappingRow(row: unknown): PortMapping | null {
     (o as Record<string, string>)['Port name'] ?? (o as Record<string, string>)['Port Name'] ?? '',
   ).trim();
   if (!portName) return null;
-  const raw = String(o.area ?? o.Area ?? 'Other');
-  const area: Area = isArea(raw) ? raw : 'Other';
+  const area: Area = canonicalArea(o.area ?? o.Area ?? 'Other');
   return { portName, area };
 }
 

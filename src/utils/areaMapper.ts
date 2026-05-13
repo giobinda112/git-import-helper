@@ -139,3 +139,12 @@ export function parsePortRoute(input: string): { loadPorts: string[]; dischargeP
 export const ALL_AREAS: Area[] = [
   'MEG', 'Red Sea', 'Indonesia', 'Med', 'Black Sea', 'Continent', 'WAfrica', 'Caribs', 'WAmerica', 'Other'
 ];
+
+/** Strict canonicalization: matches by trimmed/uppercased key; unknown → 'Other'. */
+export function canonicalArea(input: unknown): Area {
+  if (typeof input !== 'string') return 'Other';
+  const key = input.trim().toUpperCase();
+  if (!key) return 'Other';
+  const found = ALL_AREAS.find(a => a.toUpperCase() === key);
+  return found ?? 'Other';
+}
