@@ -482,7 +482,7 @@ function App() {
       />
 
       <div className="flex flex-1 overflow-hidden relative">
-        <Sidebar selectedArea={selectedArea} onSelectArea={setSelectedArea} fixtureCounts={fixtureCounts} totalFixtures={(fixturesWithDynamicArea || []).filter(f => !f.archived).length} />
+        <Sidebar selectedArea={selectedArea} onSelectArea={setSelectedArea} fixtureCounts={fixtureCounts} totalFixtures={(fixturesWithDynamicArea || []).filter(f => !f.archived && f.status !== 'FAILED').length} />
         <FixturesTable
           fixtures={fixturesWithDynamicArea} anagrafiche={anagrafiche} selectedArea={selectedArea} searchQuery={searchQuery}
           onDelete={deleteFixture} onEdit={setEditingFixture} onInlineEdit={inlineEditFixture}
