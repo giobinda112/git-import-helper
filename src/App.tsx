@@ -164,7 +164,8 @@ function App() {
     return (fixtures || []).map(f => {
       const firstLoadPort = f.loadPort?.split('-')[0]?.trim() || '';
       const dynamicArea = detectArea(firstLoadPort, anagrafiche?.portMappings || []);
-      return { ...f, area: dynamicArea || f.area || 'Other' };
+      const resolved = dynamicArea || f.area || 'Other';
+      return { ...f, area: canonicalArea(resolved) };
     });
   }, [fixtures, anagrafiche?.portMappings]);
 
