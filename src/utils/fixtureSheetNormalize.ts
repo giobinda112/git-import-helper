@@ -1,4 +1,4 @@
-import type { Fixture, Area, VesselOwner, FixtureSheetPayload } from '../types';
+import type { Fixture, Area, VesselOwner, FixtureSheetPayload, FieldEdit } from '../types';
 import { ALL_AREAS } from './areaMapper';
 import { todayISO } from './helpers';
 
