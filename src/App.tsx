@@ -327,7 +327,7 @@ function App() {
         loadPort: updated.loadPort, dischargePort: updated.dischargePort,
         laycan: updated.laycan, vessel: '', rate: '', status: '', grade: '',
         area: updated.area, dem: updated.dem,
-        comments: `FAILED - ${original.vessel} - ${original.rate}`,
+        comments: `FAILED ${original.vessel}`,
         position: '', openDate: '', editHistory: [], archived: false, private: false,
       };
       setFixtures(prev => [copy, ...(prev || []).map(f => f.id === updated.id ? archived : f)]);
