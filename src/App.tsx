@@ -92,7 +92,7 @@ function App() {
     try {
       if (data.fixtures !== undefined && data.fixtures !== null) {
         const rows = Array.isArray(data.fixtures) ? data.fixtures : [];
-        const normalized = rows.map(f => normalizeFixtureAfterPull(f as Record<string, unknown>));
+        const normalized = rows.map(f => normalizeFixtureAfterPull(f as unknown as Record<string, unknown>));
         setFixtures(prev => {
           const local = prev || [];
           // Protection: never wipe local with empty payload (likely fetch/parse failure or sheet still recalculating)
