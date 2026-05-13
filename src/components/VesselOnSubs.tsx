@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import type { Anagrafiche, Area, DwtCategory, VesselOnSubsEntry } from '../types';
+import type { Anagrafiche, DwtCategory, VesselOnSubsEntry } from '../types';
 import { getDwtCategory } from '../types';
 import { todayISO } from '../utils/helpers';
 import { detectArea } from '../utils/areaMapper';
