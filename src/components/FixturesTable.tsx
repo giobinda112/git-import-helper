@@ -101,6 +101,8 @@ export default function FixturesTable({
   useEffect(() => { if (inlineEdit && editRef.current) editRef.current.focus(); }, [inlineEdit]);
 
   let filtered = fixtures.filter(f => !f.archived);
+  // Hide FAILED rows from main view; remain accessible via search and archive.
+  if (!searchQuery) filtered = filtered.filter(f => f.status !== 'FAILED');
   if (selectedArea) filtered = filtered.filter(f => f.area === selectedArea);
   if (searchQuery) {
     const q = searchQuery;
