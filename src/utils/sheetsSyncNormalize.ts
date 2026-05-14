@@ -17,16 +17,24 @@ export function normalizeVesselOwnerRow(row: unknown): VesselOwner | null {
   };
 }
 
-/** Map sheet rows (portName / Port / name / Port name) to app model. */
+/** Map sheet rows (Port name / Area, plus legacy keys) to app model. Picks first non-empty trimmed value. */
 export function normalizePortMappingRow(row: unknown): PortMapping | null {
   if (!row || typeof row !== 'object') return null;
   const o = row as Record<string, unknown>;
-  const portName = String(
-    o.portName ?? o.Port ?? o.port ?? o.name ??
-    (o as Record<string, string>)['Port name'] ?? (o as Record<string, string>)['Port Name'] ?? '',
-  ).trim();
+  const pick = (...keys: string[]): string => {
+    for (const k of keys) {
+      const v = o[k];
+      if (v == null) continue;
+      const s = String(v).trim();
+      if (s) return s;
+    }
+    return '';
+  };
+  // Strict: spreadsheet column headers are exactly "Port name" and "Area".
+  const portName = pick('Port name', 'Port Name', 'portName', 'Port', 'port', 'name');
   if (!portName) return null;
-  const area: Area = canonicalArea(o.area ?? o.Area ?? 'Other');
+  const rawArea = pick('Area', 'area');
+  const area: Area = canonicalArea(rawArea || 'Other');
   return { portName, area };
 }
 
