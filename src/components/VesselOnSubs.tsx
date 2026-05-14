@@ -124,7 +124,8 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
     } else if (groupMode === 'area') {
       const groups: Record<string, VesselOnSubsEntry[]> = {};
       for (const f of currentEntries) {
-        const area = detectArea(f.port.split('-')[0]?.trim() || f.port, anagrafiche.portMappings) || 'UNKNOWN';
+        const portStr = (f.port || '').toString();
+        const area = detectArea(portStr.split('-')[0]?.trim() || portStr, anagrafiche.portMappings) || 'UNKNOWN';
         if (!groups[area]) groups[area] = [];
         groups[area].push(f);
       }
