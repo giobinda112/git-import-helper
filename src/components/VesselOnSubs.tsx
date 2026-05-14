@@ -84,10 +84,18 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
     setNewVessel('');
     setNewPort('');
     setNewOpenDate('');
+    if (vesselMissing(vessel)) {
+      const vo = anagrafiche.vesselOwners.find(x => x.vesselName === vessel);
+      setVesselPopup({ vessel, owner: vo?.owner || '', dwt: vo?.dwt || '', yob: vo?.yob || '' });
+    } else if (portMissing(port) && onUpsertPortArea) {
+      setPortPopup({ port: (port.split('-')[0] || '').trim().toUpperCase(), area: 'Other' });
+    }
+    onSyncNow?.();
   }
 
   function handleRemoveEntry(id: string) {
     onChangeEntries(entries.filter(e => e.id !== id));
+    onSyncNow?.();
   }
 
   const groupedByDwt = useMemo(() => {
