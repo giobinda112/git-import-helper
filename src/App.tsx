@@ -181,7 +181,7 @@ function App() {
       anagrafiche,
       vesselsOnSubs: vesselsOnSubs || [],
       masterVessels: anagrafiche.vesselOwners || [],
-      masterPorts: portsOut,
+      masterPorts: portsOut as unknown as PortMapping[],
     });
   }, [sync, fixturesWithDynamicArea, anagrafiche, vesselsOnSubs]);
 
