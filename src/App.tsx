@@ -128,7 +128,25 @@ function App() {
         });
       }
       if (data.vesselsOnSubs !== undefined && data.vesselsOnSubs !== null) {
-        const next = Array.isArray(data.vesselsOnSubs) ? data.vesselsOnSubs : [];
+        const rawList = Array.isArray(data.vesselsOnSubs) ? data.vesselsOnSubs : [];
+        // Strict mapping to schema: id|dateAdded|vessel|owner|dwt|yob|position|openDate|comments|archived
+        const next: VesselOnSubsEntry[] = rawList
+          .map((r: unknown) => {
+            const o = (r ?? {}) as Record<string, unknown>;
+            const archived = o.archived === true || String(o.archived ?? '').toLowerCase() === 'true';
+            if (archived) return null;
+            const vessel = String(o.vessel ?? '').trim().toUpperCase();
+            if (!vessel) return null;
+            const position = String(o.position ?? (o as Record<string, unknown>).port ?? '').trim().toUpperCase();
+            return {
+              id: String(o.id ?? `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
+              vessel,
+              port: position,
+              openDate: String(o.openDate ?? '').trim(),
+              dateAdded: String(o.dateAdded ?? '').trim(),
+            } as VesselOnSubsEntry;
+          })
+          .filter((x): x is VesselOnSubsEntry => x !== null);
         setVesselsOnSubs(prev => (next.length === 0 && (prev || []).length > 0 ? prev : next));
       }
     } catch (e) {

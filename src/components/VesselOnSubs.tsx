@@ -74,7 +74,8 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
   const groupedByArea = useMemo(() => {
     const groups: Record<string, VesselOnSubsEntry[]> = {};
     for (const f of entries) {
-      const area = detectArea(f.port.split('-')[0]?.trim() || f.port, anagrafiche.portMappings) || 'UNKNOWN';
+      const portStr = (f.port || '').toString();
+      const area = detectArea(portStr.split('-')[0]?.trim() || portStr, anagrafiche.portMappings) || 'UNKNOWN';
       if (!groups[area]) groups[area] = [];
       groups[area].push(f);
     }
@@ -84,7 +85,7 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
   const groupedByDate = useMemo(() => {
     const groups: Record<string, VesselOnSubsEntry[]> = {};
     for (const f of entries) {
-      const date = f.dateAdded;
+      const date = (f.dateAdded || '').split('T')[0] || 'N/A';
       if (!groups[date]) groups[date] = [];
       groups[date].push(f);
     }
@@ -123,7 +124,8 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
     } else if (groupMode === 'area') {
       const groups: Record<string, VesselOnSubsEntry[]> = {};
       for (const f of currentEntries) {
-        const area = detectArea(f.port.split('-')[0]?.trim() || f.port, anagrafiche.portMappings) || 'UNKNOWN';
+        const portStr = (f.port || '').toString();
+        const area = detectArea(portStr.split('-')[0]?.trim() || portStr, anagrafiche.portMappings) || 'UNKNOWN';
         if (!groups[area]) groups[area] = [];
         groups[area].push(f);
       }
@@ -139,7 +141,7 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
     } else {
       const groups: Record<string, VesselOnSubsEntry[]> = {};
       for (const f of currentEntries) {
-        const date = f.dateAdded;
+        const date = (f.dateAdded || '').split('T')[0] || 'N/A';
         if (!groups[date]) groups[date] = [];
         groups[date].push(f);
       }
