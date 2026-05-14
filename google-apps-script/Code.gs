@@ -76,6 +76,11 @@ function doGet(e) {
 
 /**
  * POST - Save data
+ * Supports:
+ * - rowUpsert4 / fixtureDelete4 (fixtures, one row at a time — matches Vite client)
+ * - subsRowUpsert4 / subsRowDelete4 (VesselsOnSubs)
+ * - metaSync4 (masters + full subs list; does NOT replace Fixtures)
+ * - sync4 or legacy body { data: { fixtures, ... } } (full replace)
  */
 function doPost(e) {
   try {
@@ -92,28 +97,30 @@ function doPost(e) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     initSheets(ss);
     
-    // Get data (handle both {action, data} and direct format)
-    var data = payload.data || payload;
+    var action = String(payload.action || '');
     
-    // Save each type
-    if (data.fixtures && Array.isArray(data.fixtures)) {
-      Logger.log('Saving ' + data.fixtures.length + ' fixtures');
-      writeSheet(ss, SHEET_FIXTURES, data.fixtures, HEADERS_FIXTURES);
-    }
-    
-    if (data.vesselsOnSubs && Array.isArray(data.vesselsOnSubs)) {
-      Logger.log('Saving ' + data.vesselsOnSubs.length + ' subs');
-      writeSheet(ss, SHEET_SUBS, data.vesselsOnSubs, HEADERS_SUBS);
-    }
-    
-    if (data.masterVessels && Array.isArray(data.masterVessels)) {
-      Logger.log('Saving ' + data.masterVessels.length + ' vessels');
-      writeSheet(ss, SHEET_VESSELS, data.masterVessels, KEYS_VESSELS, DISPLAY_VESSELS);
-    }
-    
-    if (data.masterPorts && Array.isArray(data.masterPorts)) {
-      Logger.log('Saving ' + data.masterPorts.length + ' ports');
-      writeSheet(ss, SHEET_PORTS, data.masterPorts, KEYS_PORTS, DISPLAY_PORTS);
+    if (action === 'rowUpsert4' && payload.row) {
+      Logger.log('rowUpsert4 id=' + (payload.row.id || ''));
+      upsertFixtureRowById_(ss, payload.row);
+    } else if (action === 'fixtureDelete4' && payload.id) {
+      Logger.log('fixtureDelete4 id=' + payload.id);
+      deleteFixtureById_(ss, String(payload.id));
+    } else if (action === 'subsRowUpsert4' && payload.row) {
+      Logger.log('subsRowUpsert4 id=' + (payload.row.id || ''));
+      upsertSubsRowById_(ss, payload.row);
+    } else if (action === 'subsRowDelete4' && payload.id) {
+      Logger.log('subsRowDelete4 id=' + payload.id);
+      deleteSubsRowById_(ss, String(payload.id));
+    } else if (action === 'metaSync4' && payload.data) {
+      Logger.log('metaSync4');
+      applyMetaSyncPayload_(ss, payload.data);
+    } else if (action === 'sync4' && payload.data) {
+      Logger.log('sync4 full write');
+      applyLegacyDataWrite_(ss, payload.data);
+    } else {
+      // Legacy: no action field — same as old client (whole data object)
+      var data = payload.data || payload;
+      applyLegacyDataWrite_(ss, data);
     }
     
     // Return updated data
@@ -398,6 +405,182 @@ function writeSheet(ss, name, data, keys, displayHeaders) {
       }
     }
   }
+}
+
+/**
+ * Legacy / sync4: replace whole tabs from arrays.
+ */
+function applyLegacyDataWrite_(ss, data) {
+  if (data.fixtures && Array.isArray(data.fixtures)) {
+    Logger.log('Saving ' + data.fixtures.length + ' fixtures (full)');
+    writeSheet(ss, SHEET_FIXTURES, data.fixtures, HEADERS_FIXTURES);
+  }
+  if (data.vesselsOnSubs && Array.isArray(data.vesselsOnSubs)) {
+    Logger.log('Saving ' + data.vesselsOnSubs.length + ' subs (full)');
+    writeSheet(ss, SHEET_SUBS, normalizeSubsList_(data.vesselsOnSubs), HEADERS_SUBS);
+  }
+  if (data.masterVessels && Array.isArray(data.masterVessels)) {
+    Logger.log('Saving ' + data.masterVessels.length + ' vessels');
+    writeSheet(ss, SHEET_VESSELS, data.masterVessels, KEYS_VESSELS, DISPLAY_VESSELS);
+  }
+  if (data.masterPorts && Array.isArray(data.masterPorts)) {
+    Logger.log('Saving ' + data.masterPorts.length + ' ports');
+    writeSheet(ss, SHEET_PORTS, data.masterPorts, KEYS_PORTS, DISPLAY_PORTS);
+  }
+}
+
+/**
+ * metaSync4: masters + full subs list only (fixtures come from rowUpsert4).
+ */
+function applyMetaSyncPayload_(ss, data) {
+  if (data.vesselsOnSubs && Array.isArray(data.vesselsOnSubs)) {
+    Logger.log('metaSync4 subs count=' + data.vesselsOnSubs.length);
+    writeSheet(ss, SHEET_SUBS, normalizeSubsList_(data.vesselsOnSubs), HEADERS_SUBS);
+  }
+  if (data.masterVessels && Array.isArray(data.masterVessels)) {
+    writeSheet(ss, SHEET_VESSELS, data.masterVessels, KEYS_VESSELS, DISPLAY_VESSELS);
+  }
+  if (data.masterPorts && Array.isArray(data.masterPorts)) {
+    writeSheet(ss, SHEET_PORTS, data.masterPorts, KEYS_PORTS, DISPLAY_PORTS);
+  }
+}
+
+/** Client uses `port`; sheet column is `position`. */
+function normalizeSubsRow_(row) {
+  if (!row || typeof row !== 'object') return {};
+  var o = {};
+  var k;
+  for (k in row) {
+    if (Object.prototype.hasOwnProperty.call(row, k)) {
+      o[k] = row[k];
+    }
+  }
+  if (o.port != null && o.port !== '' && (o.position === undefined || o.position === '')) {
+    o.position = o.port;
+  }
+  delete o.port;
+  if (o.archived === undefined) o.archived = false;
+  return o;
+}
+
+function normalizeSubsList_(list) {
+  var out = [];
+  for (var i = 0; i < list.length; i++) {
+    out.push(normalizeSubsRow_(list[i]));
+  }
+  return out;
+}
+
+function mergeFixtureRow_(existing, incoming) {
+  var out = {};
+  var i;
+  for (i = 0; i < HEADERS_FIXTURES.length; i++) {
+    var key = HEADERS_FIXTURES[i];
+    if (Object.prototype.hasOwnProperty.call(incoming, key)) {
+      out[key] = incoming[key];
+    } else if (existing && existing[key] !== undefined) {
+      out[key] = existing[key];
+    } else if (key === 'archived' || key === 'private') {
+      out[key] = false;
+    } else if (key === 'editHistory') {
+      out[key] = [];
+    } else {
+      out[key] = '';
+    }
+  }
+  out.id = String(incoming.id || (existing && existing.id) || '').trim();
+  return out;
+}
+
+function upsertFixtureRowById_(ss, row) {
+  if (!row || !row.id) {
+    throw new Error('rowUpsert4: row.id required');
+  }
+  var list = readSheet(ss, SHEET_FIXTURES, HEADERS_FIXTURES);
+  var id = String(row.id).trim();
+  var ix = -1;
+  var i;
+  for (i = 0; i < list.length; i++) {
+    if (String(list[i].id || '').trim() === id) {
+      ix = i;
+      break;
+    }
+  }
+  if (ix >= 0) {
+    list[ix] = mergeFixtureRow_(list[ix], row);
+  } else {
+    list.push(mergeFixtureRow_(null, row));
+  }
+  writeSheet(ss, SHEET_FIXTURES, list, HEADERS_FIXTURES);
+}
+
+function deleteFixtureById_(ss, id) {
+  var nid = String(id).trim();
+  if (!nid) return;
+  var list = readSheet(ss, SHEET_FIXTURES, HEADERS_FIXTURES);
+  var next = [];
+  for (var i = 0; i < list.length; i++) {
+    if (String(list[i].id || '').trim() !== nid) {
+      next.push(list[i]);
+    }
+  }
+  writeSheet(ss, SHEET_FIXTURES, next, HEADERS_FIXTURES);
+}
+
+function mergeSubsRow_(existing, incoming) {
+  var o = normalizeSubsRow_(incoming);
+  var base = existing || {};
+  var out = {};
+  var j;
+  for (j = 0; j < HEADERS_SUBS.length; j++) {
+    var key = HEADERS_SUBS[j];
+    if (Object.prototype.hasOwnProperty.call(o, key)) {
+      out[key] = o[key];
+    } else if (base[key] !== undefined && base[key] !== null) {
+      out[key] = base[key];
+    } else if (key === 'archived') {
+      out[key] = false;
+    } else {
+      out[key] = '';
+    }
+  }
+  out.id = String(o.id || (base && base.id) || '').trim();
+  return out;
+}
+
+function upsertSubsRowById_(ss, row) {
+  if (!row || !row.id) {
+    throw new Error('subsRowUpsert4: row.id required');
+  }
+  var list = readSheet(ss, SHEET_SUBS, HEADERS_SUBS);
+  var id = String(row.id).trim();
+  var ix = -1;
+  var i;
+  for (i = 0; i < list.length; i++) {
+    if (String(list[i].id || '').trim() === id) {
+      ix = i;
+      break;
+    }
+  }
+  if (ix >= 0) {
+    list[ix] = mergeSubsRow_(list[ix], row);
+  } else {
+    list.push(mergeSubsRow_(null, row));
+  }
+  writeSheet(ss, SHEET_SUBS, list, HEADERS_SUBS);
+}
+
+function deleteSubsRowById_(ss, id) {
+  var nid = String(id).trim();
+  if (!nid) return;
+  var list = readSheet(ss, SHEET_SUBS, HEADERS_SUBS);
+  var next = [];
+  for (var i = 0; i < list.length; i++) {
+    if (String(list[i].id || '').trim() !== nid) {
+      next.push(list[i]);
+    }
+  }
+  writeSheet(ss, SHEET_SUBS, next, HEADERS_SUBS);
 }
 
 /**

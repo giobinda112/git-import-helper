@@ -10,7 +10,7 @@ export type Area =
   | 'WAmerica'
   | 'Other';
 
-export type Status = '' | 'SUBS' | 'FIXED' | 'FAILED' | 'REPLACED';
+export type Status = '' | 'OPEN' | 'SUBS' | 'FIXED' | 'FAILED' | 'REPLACED';
 
 export type DwtCategory = 'AFRAMAX' | 'SUEZMAX' | 'VLCC' | '';
 
@@ -18,7 +18,10 @@ export interface FieldEdit {
   field: string;
   oldValue: string;
   newValue: string;
+  /** ISO timestamp or legacy yyyy-mm-dd date string from older rows */
   editedAt: string;
+  /** Workstation label from localStorage after login */
+  deviceOwner?: string;
 }
 
 export interface Fixture {
@@ -77,6 +80,14 @@ export interface SyncData {
   vesselsOnSubs?: VesselOnSubsEntry[];
   masterVessels?: VesselOwner[];
   masterPorts?: PortMapping[];
+}
+
+/** Payload for `metaSync4` (fixtures excluded — use rowUpsert4 per fixture). */
+export interface MetaSyncPayload {
+  anagrafiche: Anagrafiche;
+  vesselsOnSubs: VesselOnSubsEntry[];
+  masterVessels: VesselOwner[];
+  masterPorts: PortMapping[];
 }
 
 export interface VesselOnSubsEntry {

@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import type { Fixture, Anagrafiche, Area, SyncData, FieldEdit, VesselOnSubsEntry, PortMapping } from './types';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import type { Fixture, Anagrafiche, Area, SyncData, FieldEdit, VesselOnSubsEntry, PortMapping, FixtureSheetPayload } from './types';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useTheme } from './hooks/useTheme';
 import { useSync } from './hooks/useSync';
@@ -7,6 +7,7 @@ import { getDefaultPortMappings, detectArea, normalizePortKey, canonicalArea } f
 import { normalizeMasterPortsList, normalizeMasterVesselsList, pickSafeAnagraficheFromServer } from './utils/sheetsSyncNormalize';
 import { fixturesForGoogleSheetSync, normalizeFixtureAfterPull } from './utils/fixtureSheetNormalize';
 import { uniqueSorted, generateId, todayISO } from './utils/helpers';
+import { slideSessionIfValid, tryUnlock, readDeviceOwner, LS_DEVICE_OWNER } from './utils/sessionAuth';
 import QuickAdd from './components/QuickAdd';
 import FixturesTable from './components/FixturesTable';
 import Sidebar from './components/Sidebar';
@@ -53,20 +54,67 @@ function LegendPopup({ onClose, isDark }: { onClose: () => void; isDark: boolean
         <h3 className={`font-semibold text-xs mb-3 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>COLOR LEGEND</h3>
         <div className="space-y-2 text-xs">
           <div className="flex items-center gap-2">
-            <div className={`w-5 h-5 rounded shrink-0 ${isDark ? 'bg-blue-600/60 border-blue-400' : 'bg-blue-200 border-blue-400'} border-2`} />
-            <span className={isDark ? 'text-gray-300' : 'text-slate-600'}>Blue = Today</span>
+            <div className="w-5 h-5 rounded shrink-0 bg-[#1e3a8a] border-2 border-black" />
+            <span className={isDark ? 'text-gray-300' : 'text-slate-600'}>Deep royal blue / white = Today</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className={`w-5 h-5 rounded shrink-0 ${isDark ? 'bg-yellow-500/50 border-yellow-400' : 'bg-yellow-200 border-yellow-400'} border-2`} />
-            <span className={isDark ? 'text-gray-300' : 'text-slate-600'}>Yellow = Yesterday</span>
+            <div className="w-5 h-5 rounded shrink-0 bg-[#facc15] border-2 border-black" />
+            <span className={isDark ? 'text-gray-300' : 'text-slate-600'}>Electric yellow / black = Yesterday</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className={`w-5 h-5 rounded shrink-0 ${isDark ? 'bg-green-600/50 border-green-400' : 'bg-green-200 border-green-400'} border-2`} />
-            <span className={isDark ? 'text-gray-300' : 'text-slate-600'}>Green = Updated</span>
+            <div className="w-5 h-5 rounded shrink-0 bg-[#059669] border-2 border-black" />
+            <span className={isDark ? 'text-gray-300' : 'text-slate-600'}>Emerald / white = Updated this session</span>
           </div>
-          <p className={`text-[10px] mt-2 ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>Modified cells are underlined in green.</p>
+          <p className={`text-[10px] mt-2 ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>Solid row fills; grid uses dark borders.</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SessionLoginModal({ isDark, onSuccess }: { isDark: boolean; onSuccess: () => void }) {
+  const [password, setPassword] = useState('');
+  const [computer, setComputer] = useState('');
+  const [error, setError] = useState('');
+  const hasOwner = typeof localStorage !== 'undefined' && !!localStorage.getItem(LS_DEVICE_OWNER)?.trim();
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    if (!hasOwner && !computer.trim()) {
+      setError('Enter a unique computer name.');
+      return;
+    }
+    if (!tryUnlock(password, hasOwner ? undefined : computer.trim())) {
+      setError('Invalid password.');
+      return;
+    }
+    onSuccess();
+  }
+
+  const box = isDark ? 'bg-gray-900 border-gray-600 text-gray-100' : 'bg-white border-slate-300 text-slate-800';
+  const input = isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800';
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
+      <form onSubmit={submit} className={`w-full max-w-sm border-2 border-black rounded-lg p-6 shadow-2xl ${box}`}>
+        <h2 className={`text-center text-sm font-bold tracking-widest mb-1 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>SESSION LOCKED</h2>
+        <p className={`text-center text-[10px] mb-4 ${isDark ? 'text-gray-500' : 'text-slate-500'}`}>Re-enter the master password. Session extends 1 hour after unlock.</p>
+        {!hasOwner && (
+          <div className="mb-3">
+            <label className="block text-[9px] font-semibold mb-1 opacity-80">IDENTIFY THIS COMPUTER</label>
+            <input value={computer} onChange={e => setComputer(e.target.value)} placeholder="e.g. PC-Giovanni" className={`w-full border px-3 py-2 text-xs rounded ${input}`} autoComplete="off" />
+          </div>
+        )}
+        <div className="mb-3">
+          <label className="block text-[9px] font-semibold mb-1 opacity-80">PASSWORD</label>
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} className={`w-full border px-3 py-2 text-xs rounded ${input}`} autoComplete="current-password" autoFocus />
+        </div>
+        {error && <p className="text-red-500 text-[10px] mb-2">{error}</p>}
+        <button type="submit" className="w-full bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs py-2 rounded border border-black">
+          UNLOCK
+        </button>
+      </form>
     </div>
   );
 }
@@ -87,6 +135,14 @@ function App() {
   const [editingFixture, setEditingFixture] = useState<Fixture | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { theme, toggleTheme } = useTheme();
+  const [sessionOk, setSessionOk] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
+
+  useEffect(() => {
+    if (slideSessionIfValid()) setSessionOk(true);
+    else setSessionOk(false);
+    setSessionChecked(true);
+  }, []);
 
   const handleSyncData = useCallback((data: SyncData) => {
     try {
@@ -154,7 +210,7 @@ function App() {
     }
   }, [setFixtures, setAnagrafiche, setVesselsOnSubs]);
 
-  const { webhookUrl, showUrlPrompt, setShowUrlPrompt, saveWebhookUrl, sync, pull, forceRefresh, syncing, lastSync, syncError } = useSync(handleSyncData);
+  const { webhookUrl, showUrlPrompt, setShowUrlPrompt, saveWebhookUrl, pull, forceRefresh, syncing, lastSync, syncError, applyFixtureOps, syncMeta, applySubsDeletes, upsertSubsRow, deleteSubsRow } = useSync(handleSyncData);
 
   /** After first pull, allow auto-push so we do not overwrite Sheet with stale local data before load. */
   const [sheetReady, setSheetReady] = useState(false);
@@ -187,28 +243,114 @@ function App() {
     });
   }, [fixtures, anagrafiche?.portMappings]);
 
-  const handleSyncPush = useCallback(() => {
+  const fixturesRef = useRef(fixturesWithDynamicArea);
+  fixturesRef.current = fixturesWithDynamicArea;
+  const anagRef = useRef(anagrafiche);
+  anagRef.current = anagrafiche;
+
+  const pendingFixtureDeletes = useRef(new Set<string>());
+  const pendingFixtureUpserts = useRef(new Set<string>());
+  const flushTimerRef = useRef<number | null>(null);
+
+  const runFixtureFlush = useCallback(() => {
+    flushTimerRef.current = null;
+    const dels = [...pendingFixtureDeletes.current];
+    pendingFixtureDeletes.current.clear();
+    const ups = [...pendingFixtureUpserts.current];
+    pendingFixtureUpserts.current.clear();
+    const owners = anagRef.current.vesselOwners || [];
+    const upsRows = ups
+      .map(id => {
+        const f = fixturesRef.current.find(x => x.id === id);
+        return f ? fixturesForGoogleSheetSync([f], owners)[0] : null;
+      })
+      .filter((x): x is FixtureSheetPayload => x != null);
+    void applyFixtureOps({ deleteIds: dels, upsertRows: upsRows });
+  }, [applyFixtureOps]);
+
+  const scheduleFixtureFlush = useCallback(() => {
+    if (flushTimerRef.current != null) window.clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = window.setTimeout(() => {
+      flushTimerRef.current = null;
+      runFixtureFlush();
+    }, 350);
+  }, [runFixtureFlush]);
+
+  const queueFixtureUpsert = useCallback(
+    (id: string) => {
+      pendingFixtureDeletes.current.delete(id);
+      pendingFixtureUpserts.current.add(id);
+      if (webhookUrl && sheetReady && sessionOk) scheduleFixtureFlush();
+    },
+    [webhookUrl, sheetReady, sessionOk, scheduleFixtureFlush]
+  );
+
+  const queueFixtureDelete = useCallback(
+    (id: string) => {
+      pendingFixtureUpserts.current.delete(id);
+      pendingFixtureDeletes.current.add(id);
+      if (webhookUrl && sheetReady && sessionOk) scheduleFixtureFlush();
+    },
+    [webhookUrl, sheetReady, sessionOk, scheduleFixtureFlush]
+  );
+
+  const flushFixtureSyncNow = useCallback(() => {
+    if (flushTimerRef.current != null) {
+      window.clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    if (pendingFixtureDeletes.current.size > 0 || pendingFixtureUpserts.current.size > 0) runFixtureFlush();
+  }, [runFixtureFlush]);
+
+  const handleSyncPush = useCallback(async () => {
+    flushFixtureSyncNow();
     const portsOut = (anagrafiche.portMappings || []).map(pm => ({
       portName: String(pm.portName || '').trim(),
       area: String(pm.area || 'Other').trim(),
       'Port name': String(pm.portName || '').trim(),
       Area: String(pm.area || 'Other').trim(),
     }));
-    sync({
-      fixtures: fixturesForGoogleSheetSync(fixturesWithDynamicArea, anagrafiche.vesselOwners || []),
+    await syncMeta({
       anagrafiche,
       vesselsOnSubs: vesselsOnSubs || [],
       masterVessels: anagrafiche.vesselOwners || [],
       masterPorts: portsOut as unknown as PortMapping[],
     });
-  }, [sync, fixturesWithDynamicArea, anagrafiche, vesselsOnSubs]);
+    await pull();
+  }, [flushFixtureSyncNow, syncMeta, pull, anagrafiche, vesselsOnSubs]);
 
-  /** App → Sheet: push soon after any local change (~instant; debounced to batch rapid edits). */
+  /** Master lists + subs (fixtures use atomic rowUpsert4 only). */
   useEffect(() => {
-    if (!webhookUrl || !sheetReady) return;
-    const id = window.setTimeout(() => handleSyncPush(), 350);
+    if (!webhookUrl || !sheetReady || !sessionOk) return;
+    const id = window.setTimeout(() => {
+      const portsOut = (anagrafiche.portMappings || []).map(pm => ({
+        portName: String(pm.portName || '').trim(),
+        area: String(pm.area || 'Other').trim(),
+        'Port name': String(pm.portName || '').trim(),
+        Area: String(pm.area || 'Other').trim(),
+      }));
+      void syncMeta({
+        anagrafiche,
+        vesselsOnSubs: vesselsOnSubs || [],
+        masterVessels: anagrafiche.vesselOwners || [],
+        masterPorts: portsOut as unknown as PortMapping[],
+      });
+    }, 450);
     return () => window.clearTimeout(id);
-  }, [webhookUrl, sheetReady, fixturesWithDynamicArea, anagrafiche, vesselsOnSubs, handleSyncPush]);
+  }, [webhookUrl, sheetReady, sessionOk, anagrafiche, vesselsOnSubs, syncMeta]);
+
+  const handleSubsExpiredByCleanup = useCallback(
+    async (ids: string[]) => {
+      if (!ids.length) return;
+      await applySubsDeletes(ids);
+      await pull();
+    },
+    [applySubsDeletes, pull]
+  );
+
+  function auditMeta(): Pick<FieldEdit, 'editedAt' | 'deviceOwner'> {
+    return { editedAt: new Date().toISOString(), deviceOwner: readDeviceOwner() || 'UNKNOWN' };
+  }
 
   function updateAnagraficheFromFixture(fixture: Fixture) {
     setAnagrafiche(prev => {
@@ -240,11 +382,14 @@ function App() {
   }
 
   function addFixture(fixture: Fixture) {
+    queueFixtureUpsert(fixture.id);
     setFixtures(prev => [fixture, ...(prev || [])]);
     updateAnagraficheFromFixture(fixture);
   }
 
   function replaceFixture(oldId: string, newFixture: Fixture) {
+    queueFixtureDelete(oldId);
+    queueFixtureUpsert(newFixture.id);
     setFixtures(prev => [newFixture, ...(prev || []).filter(f => f.id !== oldId)]);
     updateAnagraficheFromFixture(newFixture);
   }
@@ -307,56 +452,76 @@ function App() {
   }
 
   function bulkAddFixtures(newFixtures: Fixture[]) {
+    for (const f of newFixtures) queueFixtureUpsert(f.id);
     setFixtures(prev => [...newFixtures, ...(prev || [])]);
     for (const f of newFixtures) updateAnagraficheFromFixture(f);
   }
 
   function deleteFixture(id: string) {
+    queueFixtureDelete(id);
     setFixtures(prev => (prev || []).filter(f => f.id !== id));
     setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
   }
 
   function togglePrivate(id: string) {
+    queueFixtureUpsert(id);
     setFixtures(prev => (prev || []).map(f => f.id === id ? { ...f, private: !f.private } : f));
   }
 
   function rolloverFixture(id: string) {
     const today = todayISO();
-    setFixtures(prev => {
-      const list = prev || [];
-      const original = list.find(f => f.id === id);
-      if (!original) return list;
-      // Archive the original
-      const archived = { ...original, archived: true };
-      // Create a copy with today's date and an edit history entry so it shows green
-      const edit: FieldEdit = { field: 'dateAdded', oldValue: original.dateAdded, newValue: today, editedAt: today };
-      const rolled: Fixture = {
-        ...original,
-        id: generateId(),
-        dateAdded: today,
-        editHistory: [...original.editHistory, edit],
-        archived: false,
-      };
-      return [rolled, ...list.map(f => f.id === id ? archived : f)];
-    });
+    const list = fixtures || [];
+    const original = list.find(f => f.id === id);
+    if (!original) return;
+    const archived = { ...original, archived: true };
+    const edit: FieldEdit = { field: 'dateAdded', oldValue: original.dateAdded, newValue: today, ...auditMeta() };
+    const rolled: Fixture = {
+      ...original,
+      id: generateId(),
+      dateAdded: today,
+      editHistory: [...original.editHistory, edit],
+      archived: false,
+    };
+    queueFixtureUpsert(id);
+    queueFixtureUpsert(rolled.id);
+    setFixtures(prev => [rolled, ...(prev || []).map(f => f.id === id ? archived : f)]);
   }
 
   function saveEditedFixture(updated: Fixture) {
     const original = (fixtures || []).find(f => f.id === updated.id);
     if (original && original.status !== 'FAILED' && updated.status === 'FAILED') {
       const archived = { ...updated, archived: true };
+      const prevVessel = (original.vessel || '').trim();
+      const failTail = prevVessel ? `FAILED ${prevVessel}` : 'FAILED';
+      const cm = (updated.comments || '').trim();
+      const openComments = cm ? `${cm} ${failTail}` : failTail;
       const copy: Fixture = {
-        id: generateId(), dateAdded: todayISO(),
-        charterers: updated.charterers, qty: updated.qty,
-        loadPort: updated.loadPort, dischargePort: updated.dischargePort,
-        laycan: updated.laycan, vessel: '', rate: '', status: '', grade: '',
-        area: updated.area, dem: updated.dem,
-        comments: `FAILED ${original.vessel}`,
-        position: '', openDate: '', editHistory: [], archived: false, private: false,
+        id: generateId(),
+        dateAdded: todayISO(),
+        charterers: updated.charterers,
+        qty: updated.qty,
+        loadPort: updated.loadPort,
+        dischargePort: updated.dischargePort,
+        laycan: updated.laycan,
+        vessel: '',
+        rate: '',
+        status: 'OPEN',
+        grade: updated.grade,
+        area: updated.area,
+        dem: updated.dem,
+        comments: openComments,
+        position: '',
+        openDate: '',
+        editHistory: [],
+        archived: false,
+        private: false,
       };
+      queueFixtureUpsert(updated.id);
+      queueFixtureUpsert(copy.id);
       setFixtures(prev => [copy, ...(prev || []).map(f => f.id === updated.id ? archived : f)]);
       updateAnagraficheFromFixture(copy);
     } else {
+      queueFixtureUpsert(updated.id);
       setFixtures(prev => (prev || []).map(f => f.id === updated.id ? updated : f));
       updateAnagraficheFromFixture(updated);
     }
@@ -364,51 +529,66 @@ function App() {
   }
 
   function inlineEditFixture(fixtureId: string, field: string, newValue: string) {
-    // FAILED status via inline edit: lock current row + duplicate as fresh open cargo
     if (field === 'status' && newValue === 'FAILED') {
       const original = (fixtures || []).find(f => f.id === fixtureId);
       if (original && original.status !== 'FAILED') {
-        const edit: FieldEdit = { field: 'status', oldValue: original.status, newValue: 'FAILED', editedAt: todayISO() };
+        const edit: FieldEdit = { field: 'status', oldValue: original.status, newValue: 'FAILED', ...auditMeta() };
         const failedRow: Fixture = { ...original, status: 'FAILED', editHistory: [...original.editHistory, edit] };
-        const prevVessel = original.vessel || '';
-        const appendedComment = original.comments
-          ? `${original.comments} | FAILED ${prevVessel}`
-          : `FAILED ${prevVessel}`;
+        const prevVessel = (original.vessel || '').trim();
+        const failTail = prevVessel ? `FAILED ${prevVessel}` : 'FAILED';
+        const cm = (original.comments || '').trim();
+        const openComments = cm ? `${cm} ${failTail}` : failTail;
         const copy: Fixture = {
-          id: generateId(), dateAdded: todayISO(),
-          charterers: original.charterers, qty: original.qty,
-          loadPort: original.loadPort, dischargePort: original.dischargePort,
-          laycan: original.laycan, vessel: '', rate: '', status: '', grade: original.grade,
-          area: original.area, dem: original.dem,
-          comments: appendedComment,
-          position: '', openDate: '', editHistory: [], archived: false, private: false,
+          id: generateId(),
+          dateAdded: todayISO(),
+          charterers: original.charterers,
+          qty: original.qty,
+          loadPort: original.loadPort,
+          dischargePort: original.dischargePort,
+          laycan: original.laycan,
+          vessel: '',
+          rate: '',
+          status: 'OPEN',
+          grade: original.grade,
+          area: original.area,
+          dem: original.dem,
+          comments: openComments,
+          position: '',
+          openDate: '',
+          editHistory: [],
+          archived: false,
+          private: false,
         };
+        queueFixtureUpsert(fixtureId);
+        queueFixtureUpsert(copy.id);
         setFixtures(prev => [copy, ...(prev || []).map(f => f.id === fixtureId ? failedRow : f)]);
         return;
       }
     }
+    const cur = (fixtures || []).find(f => f.id === fixtureId);
+    if (!cur) return;
+    if ((cur as unknown as Record<string, unknown>)[field] === newValue) return;
+    queueFixtureUpsert(fixtureId);
     setFixtures(prev => (prev || []).map(f => {
       if (f.id !== fixtureId) return f;
       const oldValue = (f as unknown as Record<string, unknown>)[field] as string;
       if (oldValue === newValue) return f;
-      const edit: FieldEdit = { field, oldValue, newValue, editedAt: todayISO() };
+      const edit: FieldEdit = { field, oldValue, newValue, ...auditMeta() };
       const updated = { ...f, [field]: newValue, editHistory: [...f.editHistory, edit] };
-      // Sync to Master Data
       if (field === 'charterers' && newValue) addCharterer(newValue);
       if (field === 'grade' && newValue) addGrade(newValue);
       if (field === 'vessel' && newValue) {
         if (!anagrafiche.vessels.includes(newValue)) {
-          setAnagrafiche(prev => ({ ...prev, vessels: uniqueSorted([...prev.vessels, newValue]) }));
+          setAnagrafiche(p => ({ ...p, vessels: uniqueSorted([...p.vessels, newValue]) }));
         }
       }
       if (field === 'loadPort' && newValue) {
         const ports = newValue.split('-').map(p => p.trim()).filter(Boolean);
         for (const port of ports) {
           if (!anagrafiche.loadPorts.includes(port)) {
-            setAnagrafiche(prev => ({ ...prev, loadPorts: uniqueSorted([...prev.loadPorts, port]) }));
+            setAnagrafiche(p => ({ ...p, loadPorts: uniqueSorted([...p.loadPorts, port]) }));
           }
         }
-        // Re-detect area from first port
         const firstPort = ports[0];
         const newArea = detectArea(firstPort, anagrafiche.portMappings);
         if (newArea && newArea !== updated.area) {
@@ -419,7 +599,7 @@ function App() {
         const ports = newValue.split('-').map(p => p.trim()).filter(Boolean);
         for (const port of ports) {
           if (!anagrafiche.dischargePorts.includes(port)) {
-            setAnagrafiche(prev => ({ ...prev, dischargePorts: uniqueSorted([...prev.dischargePorts, port]) }));
+            setAnagrafiche(p => ({ ...p, dischargePorts: uniqueSorted([...p.dischargePorts, port]) }));
           }
         }
       }
@@ -435,15 +615,16 @@ function App() {
 
   function handleRollover(ids: string[]) {
     const today = todayISO();
-    setFixtures(prev => {
-      const list = prev || [];
-      const rolled = ids.map(id => {
-        const original = list.find(f => f.id === id);
-        if (!original) return null;
-        return { ...original, id: generateId(), dateAdded: today, editHistory: [], archived: false, private: false } as Fixture;
-      }).filter(Boolean) as Fixture[];
-      return [...rolled, ...list];
-    });
+    const list = fixtures || [];
+    const rolled: Fixture[] = [];
+    for (const id of ids) {
+      const original = list.find(f => f.id === id);
+      if (!original) continue;
+      const r: Fixture = { ...original, id: generateId(), dateAdded: today, editHistory: [], archived: false, private: false };
+      rolled.push(r);
+      queueFixtureUpsert(r.id);
+    }
+    setFixtures(prev => [...rolled, ...(prev || [])]);
     setShowArchive(false);
   }
 
@@ -453,6 +634,19 @@ function App() {
   }
 
   const isDark = theme === 'dark';
+
+  if (!sessionChecked) {
+    return (
+      <div className={`h-screen flex items-center justify-center ${isDark ? 'bg-gray-950 text-gray-200' : 'bg-white text-slate-600'}`}>
+        <span className="text-xs tracking-wide">LOADING…</span>
+      </div>
+    );
+  }
+
+  if (!sessionOk) {
+    return <SessionLoginModal isDark={isDark} onSuccess={() => setSessionOk(true)} />;
+  }
+
   const btnCls = isDark
     ? 'text-gray-400 hover:text-amber-500 border-gray-700 hover:border-amber-600'
     : 'text-slate-500 hover:text-amber-600 border-slate-200 hover:border-amber-500';
@@ -542,8 +736,21 @@ function App() {
       {showExport && <ExportModal fixtures={fixturesWithDynamicArea} anagrafiche={anagrafiche} selectedIds={selectedIds} activeArea={selectedArea as Area | null} onClose={() => setShowExport(false)} />}
       {showArchive && <ArchiveModal fixtures={fixturesWithDynamicArea} anagrafiche={anagrafiche} onDelete={deleteFixture} onEdit={setEditingFixture} onRollover={handleRollover} onClose={() => setShowArchive(false)} />}
       {showBulkInsert && <BulkInsertModal anagrafiche={anagrafiche} onBulkAdd={bulkAddFixtures} onClose={() => setShowBulkInsert(false)} />}
-      {editingFixture && <EditFixtureModal fixture={editingFixture} anagrafiche={anagrafiche} onSave={saveEditedFixture} onClose={() => setEditingFixture(null)} />}
-      {showVesselOnSubs && <VesselOnSubs anagrafiche={anagrafiche} entries={vesselsOnSubs || []} onChangeEntries={setVesselsOnSubs} onUpsertVesselMetadata={upsertVesselMetadata} onUpsertPortArea={upsertPortArea} onSyncNow={handleSyncPush} onClose={() => setShowVesselOnSubs(false)} />}
+      {editingFixture && <EditFixtureModal fixture={editingFixture} anagrafiche={anagrafiche} deviceOwner={readDeviceOwner() || 'UNKNOWN'} onSave={saveEditedFixture} onClose={() => setEditingFixture(null)} />}
+      {showVesselOnSubs && (
+        <VesselOnSubs
+          anagrafiche={anagrafiche}
+          entries={vesselsOnSubs || []}
+          onChangeEntries={setVesselsOnSubs}
+          onUpsertVesselMetadata={upsertVesselMetadata}
+          onUpsertPortArea={upsertPortArea}
+          onSubsRowAdded={row => void upsertSubsRow(row)}
+          onSubsRowRemoved={id => void deleteSubsRow(id)}
+          onSubsExpired={handleSubsExpiredByCleanup}
+          onSyncNow={handleSyncPush}
+          onClose={() => setShowVesselOnSubs(false)}
+        />
+      )}
     </div>
   );
 }

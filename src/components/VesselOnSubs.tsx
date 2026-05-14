@@ -13,6 +13,10 @@ interface VesselOnSubsProps {
   onChangeEntries: (entries: VesselOnSubsEntry[]) => void;
   onUpsertVesselMetadata: (vesselName: string, owner: string, dwt: string, yob: string) => void;
   onUpsertPortArea?: (portName: string, area: Area) => void;
+  onSubsRowAdded?: (row: VesselOnSubsEntry) => void;
+  onSubsRowRemoved?: (id: string) => void;
+  /** Called with IDs removed by the 72h scanner so the server can delete them and clients can pull. */
+  onSubsExpired?: (removedIds: string[]) => void;
   onSyncNow?: () => void;
   onClose: () => void;
 }
@@ -21,7 +25,7 @@ type GroupMode = 'dwt' | 'area' | 'date';
 
 const DWT_ORDER: DwtCategory[] = ['AFRAMAX', 'SUEZMAX', 'VLCC'];
 
-export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, onUpsertVesselMetadata, onUpsertPortArea, onSyncNow, onClose }: VesselOnSubsProps) {
+export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, onUpsertVesselMetadata, onUpsertPortArea, onSubsRowAdded, onSubsRowRemoved, onSubsExpired, onSyncNow, onClose }: VesselOnSubsProps) {
   const [groupMode, setGroupMode] = useState<GroupMode>('date');
   const [newVessel, setNewVessel] = useState('');
   const [newPort, setNewPort] = useState('');
@@ -58,11 +62,21 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
   };
 
   useEffect(() => {
-    const cutoff = Date.now() - (72 * 60 * 60 * 1000);
-    onChangeEntries(entries.filter(e => {
+    const cutoff = Date.now() - 72 * 60 * 60 * 1000;
+    const removed = entries.filter(e => {
+      const ts = new Date(e.dateAdded).getTime();
+      return !(Number.isFinite(ts) && ts >= cutoff);
+    });
+    const kept = entries.filter(e => {
       const ts = new Date(e.dateAdded).getTime();
       return Number.isFinite(ts) && ts >= cutoff;
-    }));
+    });
+    if (removed.length > 0) {
+      onSubsExpired?.(removed.map(r => r.id));
+    }
+    if (removed.length > 0 || kept.length !== entries.length) {
+      onChangeEntries(kept);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleAddEntry() {
@@ -81,6 +95,7 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
       dateAdded: todayISO(),
     };
     onChangeEntries([entry, ...entries]);
+    onSubsRowAdded?.(entry);
     setNewVessel('');
     setNewPort('');
     setNewOpenDate('');
@@ -94,6 +109,7 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
   }
 
   function handleRemoveEntry(id: string) {
+    onSubsRowRemoved?.(id);
     onChangeEntries(entries.filter(e => e.id !== id));
     onSyncNow?.();
   }

@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import type { Fixture, Anagrafiche, Area } from '../types';
+import type { Fixture, Anagrafiche, Area, FieldEdit } from '../types';
 import { getISOWeek, formatDate, displayLaycan } from '../utils/laycanParser';
 import { ALL_AREAS, normalizePortKey } from '../utils/areaMapper';
 import { matchesSearch } from '../utils/helpers';
@@ -39,48 +39,78 @@ const STATUS_TEXT_LIGHT: Record<string, string> = {
 
 type DateCat = 'today' | 'today-rolled' | 'yesterday' | 'yesterday-modified' | null;
 
+/** Match calendar day for ISO timestamps or legacy yyyy-mm-dd `editedAt` values. */
+function sameCalendarDay(isoOrDate: string, yyyyMmDd: string): boolean {
+  if (!isoOrDate) return false;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(isoOrDate.trim())) return isoOrDate.trim() === yyyyMmDd;
+  return isoOrDate.slice(0, 10) === yyyyMmDd;
+}
+
 function getDateCategory(fixture: Fixture): DateCat {
   const da = fixture.dateAdded?.trim();
   if (!da || !/^\d{4}-\d{2}-\d{2}$/.test(da)) return null;
   const today = new Date().toISOString().split('T')[0];
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
   if (da === today) {
-    // Check if this was rolled over (has a dateAdded edit today)
-    const rolledOver = fixture.editHistory.some(e => e.field === 'dateAdded' && e.editedAt === today);
+    const rolledOver = fixture.editHistory.some(e => e.field === 'dateAdded' && sameCalendarDay(e.editedAt, today));
     if (rolledOver) return 'today-rolled';
     return 'today';
   }
   if (da === yesterday) {
-    const modifiedToday = fixture.editHistory.some(e => e.editedAt === today);
+    const modifiedToday = fixture.editHistory.some(e => sameCalendarDay(e.editedAt, today));
     if (modifiedToday) return 'yesterday-modified';
     return 'yesterday';
   }
   return null;
 }
 
-function getRowBg(cat: DateCat, isDark: boolean): string {
-  if (isDark) {
-    if (cat === 'today') return 'bg-blue-700/40';
-    if (cat === 'today-rolled') return 'bg-green-600/40';
-    if (cat === 'yesterday') return 'bg-yellow-600/30';
-    if (cat === 'yesterday-modified') return 'bg-green-600/40';
-  } else {
-    if (cat === 'today') return 'bg-blue-200/60';
-    if (cat === 'today-rolled') return 'bg-green-200/60';
-    if (cat === 'yesterday') return 'bg-yellow-200/50';
-    if (cat === 'yesterday-modified') return 'bg-green-200/60';
-  }
-  return '';
-}
+type RowTone = { row: string; text: string; muted: string; accent: string; rate: string; underline: string };
 
-function getRowTextOverride(cat: DateCat, isDark: boolean): string {
-  if (cat === 'today-rolled' || cat === 'yesterday-modified') return isDark ? 'text-green-300' : 'text-green-700';
-  return '';
+function getRowTone(cat: DateCat, isDark: boolean): RowTone {
+  if (cat === 'today') {
+    return {
+      row: 'bg-[#1e3a8a]',
+      text: 'text-white font-bold',
+      muted: 'text-white font-bold',
+      accent: 'text-white font-bold',
+      rate: 'text-white font-bold',
+      underline: 'underline decoration-white decoration-2 underline-offset-2',
+    };
+  }
+  if (cat === 'yesterday') {
+    return {
+      row: 'bg-[#facc15]',
+      text: 'text-black font-bold',
+      muted: 'text-black font-bold',
+      accent: 'text-black font-bold',
+      rate: 'text-black font-bold',
+      underline: 'underline decoration-black decoration-2 underline-offset-2',
+    };
+  }
+  if (cat === 'today-rolled' || cat === 'yesterday-modified') {
+    return {
+      row: 'bg-[#059669]',
+      text: 'text-white font-bold',
+      muted: 'text-white font-bold',
+      accent: 'text-white font-bold',
+      rate: 'text-white font-bold',
+      underline: 'underline decoration-white decoration-2 underline-offset-2',
+    };
+  }
+  const u = isDark ? 'decoration-green-400' : 'decoration-green-700';
+  return {
+    row: '',
+    text: isDark ? 'text-gray-200' : 'text-slate-700',
+    muted: isDark ? 'text-gray-400' : 'text-slate-500',
+    accent: isDark ? 'text-amber-400' : 'text-amber-600',
+    rate: isDark ? 'text-cyan-400' : 'text-cyan-700',
+    underline: `underline ${u} decoration-2 underline-offset-2`,
+  };
 }
 
 function isFieldModifiedToday(fixture: Fixture, field: string): boolean {
   const today = new Date().toISOString().split('T')[0];
-  return fixture.editHistory.some(e => e.field === field && e.editedAt === today);
+  return fixture.editHistory.some(e => e.field === field && sameCalendarDay(e.editedAt, today));
 }
 
 const INLINE_FIELDS = ['charterers', 'qty', 'grade', 'loadPort', 'dischargePort', 'laycan', 'vessel', 'rate', 'status', 'dem', 'comments'];
@@ -95,6 +125,7 @@ export default function FixturesTable({
   const [inlineEdit, setInlineEdit] = useState<{ fixtureId: string; field: string; value: string } | null>(null);
   const [vesselPopup, setVesselPopup] = useState<{ vessel: string; owner: string; dwt: string; yob: string } | null>(null);
   const [portPopup, setPortPopup] = useState<{ port: string; area: Area } | null>(null);
+  const [historyFixture, setHistoryFixture] = useState<Fixture | null>(null);
   const editRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
   const isDark = document.documentElement.classList.contains('dark');
 
@@ -191,23 +222,21 @@ export default function FixturesTable({
     } else { setInlineEdit(null); }
   }
 
-  function cellCls(f: Fixture, field: string, base: string): string {
+  function cellCls(f: Fixture, field: string, base: string, tone: RowTone): string {
     const modified = isFieldModifiedToday(f, field);
-    const underline = modified ? 'underline decoration-green-500 decoration-2 underline-offset-2' : '';
+    const underline = modified ? tone.underline : '';
     return `${base} ${underline}`;
   }
 
-  const hdrBg = isDark ? 'bg-gray-800/80 border-gray-700' : 'bg-slate-100 border-slate-200';
-  const hdrText = isDark ? 'text-amber-500' : 'text-amber-600';
-  const hdrSub = isDark ? 'text-gray-500' : 'text-slate-400';
-  const thCls = isDark ? 'text-gray-500 border-gray-800' : 'text-slate-400 border-slate-200';
-  const selBg = isDark ? 'bg-amber-900/20' : 'bg-amber-50';
-  const hoverBg = isDark ? 'hover:bg-gray-800/30' : 'hover:bg-slate-50';
-  const barBg = isDark ? 'bg-gray-900/50 border-gray-800' : 'bg-slate-50 border-slate-200';
+  const hdrBg = isDark ? 'bg-neutral-900 text-amber-400' : 'bg-neutral-200 text-amber-800';
+  const hdrSub = isDark ? 'text-gray-400' : 'text-slate-600';
+  const thCls = 'border border-neutral-900 text-left px-2 py-1 font-semibold text-[10px] align-middle';
+  const hoverBg = isDark ? 'hover:brightness-110' : 'hover:brightness-95';
+  const barBg = isDark ? 'bg-gray-900/50 border-neutral-900' : 'bg-slate-50 border-neutral-900';
   const barText = isDark ? 'text-gray-500' : 'text-slate-400';
   const inputCls = `${isDark ? 'bg-gray-800 border-amber-500 text-gray-100' : 'bg-white border-amber-500 text-slate-800'} border px-1 py-0 text-xs focus:outline-none rounded-sm w-full`;
 
-  function renderCell(f: Fixture, field: string, displayVal: string, baseCls: string) {
+  function renderCell(f: Fixture, field: string, displayVal: string, baseCls: string, tone: RowTone) {
     const isEditing = inlineEdit?.fixtureId === f.id && inlineEdit?.field === field;
     const canEdit = INLINE_FIELDS.includes(field);
 
@@ -219,13 +248,13 @@ export default function FixturesTable({
       };
       if (field === 'status') {
         return <select ref={editRef as React.RefObject<HTMLSelectElement>} value={inlineEdit!.value} onChange={e => setInlineEdit({ ...inlineEdit!, value: e.target.value })} onKeyDown={handleKeyDown} onBlur={confirmInlineEdit} className={inputCls}>
-          {['', 'SUBS', 'FIXED', 'FAILED', 'REPLACED'].map(s => <option key={s || '_'} value={s}>{s || '--'}</option>)}
+          {['', 'OPEN', 'SUBS', 'FIXED', 'FAILED', 'REPLACED'].map(s => <option key={s || '_'} value={s}>{s || '--'}</option>)}
         </select>;
       }
       return <input ref={editRef as React.RefObject<HTMLInputElement>} type="text" value={inlineEdit!.value} onChange={e => setInlineEdit({ ...inlineEdit!, value: e.target.value })} onKeyDown={handleKeyDown} onBlur={confirmInlineEdit} className={inputCls} />;
     }
 
-    return <span className={cellCls(f, field, baseCls)} onDoubleClick={() => canEdit && startInlineEdit(f.id, field, displayVal === '--' ? '' : displayVal)}>{displayVal}</span>;
+    return <span className={cellCls(f, field, baseCls, tone)} onDoubleClick={() => canEdit && startInlineEdit(f.id, field, displayVal === '--' ? '' : displayVal)}>{displayVal}</span>;
   }
 
   function openPortPopup(port: string) {
@@ -247,73 +276,75 @@ export default function FixturesTable({
       )}
       {grouped.map(({ week, fixtures: weekFixtures }) => (
         <div key={week} className="mb-px">
-          <div className={`${hdrBg} px-4 py-1.5 border-b sticky top-0 z-10`}>
-            <span className={`font-semibold text-xs tracking-wide ${hdrText}`}>{week}</span>
+          <div className={`${hdrBg} px-4 py-1.5 border border-neutral-900 sticky top-0 z-10`}>
+            <span className="font-semibold text-xs tracking-wide">{week}</span>
             <span className={`${hdrSub} text-xs ml-3`}>{weekFixtures.length} fixture{weekFixtures.length !== 1 ? 's' : ''}</span>
           </div>
-          <table className="w-full text-xs">
+          <table className="w-full text-xs border-collapse border border-neutral-900">
             <thead>
-              <tr className={`${thCls} border-b`}>
-                <th className="text-left px-2 py-1 w-8"></th>
-                <th className="text-left px-2 py-1 w-6"></th>
+              <tr className="bg-neutral-950/5">
+                <th className={`${thCls} w-8`}></th>
+                <th className={`${thCls} w-6`}></th>
                 {columns.map(col => (
-                  <th key={col.field} className={`text-left px-2 py-1 ${col.width} cursor-pointer select-none hover:opacity-70 transition-opacity`} onClick={() => handleSort(col.field)}>
+                  <th key={col.field} className={`${thCls} ${col.width} cursor-pointer select-none hover:opacity-80 transition-opacity`} onClick={() => handleSort(col.field)}>
                     {col.label}<SortIcon field={col.field} />
                   </th>
                 ))}
-                <th className="text-right px-2 py-1 w-12"></th>
+                <th className={`${thCls} w-10 text-center`} title="Edit history">🕒</th>
+                <th className={`${thCls} w-12 text-right`}></th>
               </tr>
             </thead>
             <tbody>
               {weekFixtures.map(f => {
                 const cat = getDateCategory(f);
-                const rowBg = getRowBg(cat, isDark);
-                const rowTextOverride = getRowTextOverride(cat, isDark);
-                const statusBorder = STATUS_BORDER[f.status] || '';
-                const statusText = isDark ? STATUS_TEXT_DARK[f.status] || '' : STATUS_TEXT_LIGHT[f.status] || '';
-                const baseText = rowTextOverride || (isDark ? 'text-gray-200' : 'text-slate-700');
-                const mutedText = rowTextOverride || (isDark ? 'text-gray-400' : 'text-slate-500');
-                const accentText = rowTextOverride || (isDark ? 'text-amber-400' : 'text-amber-600');
-                const rateText = rowTextOverride || (isDark ? 'text-cyan-400' : 'text-cyan-700');
+                const tone = getRowTone(cat, isDark);
+                const statusBorder = STATUS_BORDER[f.status] || 'border-l-transparent';
+                const statusTone = cat
+                  ? tone.muted
+                  : (isDark ? STATUS_TEXT_DARK[f.status] || tone.muted : STATUS_TEXT_LIGHT[f.status] || tone.muted);
+                const baseText = tone.text;
+                const mutedText = tone.muted;
+                const accentText = tone.accent;
+                const rateText = tone.rate;
 
                 return (
-                  <tr key={f.id} className={`border-l-2 ${statusBorder} ${rowBg} ${selectedIds.has(f.id) ? selBg : ''} ${hoverBg} transition-colors`}>
-                    <td className="px-2 py-0.5"><input type="checkbox" checked={selectedIds.has(f.id)} onChange={() => onToggleSelect(f.id)} className="accent-amber-500 cursor-pointer" /></td>
-                    <td className="px-1 py-0.5">
+                  <tr key={f.id} className={`border border-neutral-900 border-l-[3px] ${statusBorder} ${tone.row} ${selectedIds.has(f.id) ? 'ring-2 ring-inset ring-amber-400' : ''} ${hoverBg} transition-[filter]`}>
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle"><input type="checkbox" checked={selectedIds.has(f.id)} onChange={() => onToggleSelect(f.id)} className="accent-amber-500 cursor-pointer" /></td>
+                    <td className="border border-neutral-900 px-1 py-0.5 align-middle">
                       {f.private && <span title="Private"><Skull size={11} className="text-red-500" /></span>}
                     </td>
-                    <td className={`px-2 py-0.5 ${mutedText}`}>{formatDate(f.dateAdded)}</td>
-                    <td className="px-2 py-0.5">{renderCell(f, 'charterers', f.charterers || '--', baseText)}</td>
-                    <td className="px-2 py-0.5">{renderCell(f, 'qty', f.qty || '--', mutedText)}</td>
-                    <td className="px-2 py-0.5">{renderCell(f, 'grade', f.grade || '--', mutedText)}</td>
-                    <td className="px-2 py-0.5">
+                    <td className={`border border-neutral-900 px-2 py-0.5 align-middle ${mutedText}`}>{formatDate(f.dateAdded)}</td>
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'charterers', f.charterers || '--', baseText, tone)}</td>
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'qty', f.qty || '--', mutedText, tone)}</td>
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'grade', f.grade || '--', mutedText, tone)}</td>
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">
                       <div className="inline-flex items-center gap-1">
-                        {renderCell(f, 'loadPort', f.loadPort || '--', baseText)}
+                        {renderCell(f, 'loadPort', f.loadPort || '--', baseText, tone)}
                         {f.loadPort.split('-').map(p => p.trim()).filter(Boolean).some(p => !anagrafiche.portMappings.find(pm => normalizePortKey(pm.portName) === normalizePortKey(p))) && (
-                          <button onClick={() => openPortPopup(f.loadPort.split('-').map(p => p.trim()).find(p => !anagrafiche.portMappings.find(pm => normalizePortKey(pm.portName) === normalizePortKey(p))) || f.loadPort)} className="text-yellow-500 hover:text-yellow-400">
+                          <button type="button" onClick={() => openPortPopup(f.loadPort.split('-').map(p => p.trim()).find(p => !anagrafiche.portMappings.find(pm => normalizePortKey(pm.portName) === normalizePortKey(p))) || f.loadPort)} className="text-yellow-500 hover:text-yellow-400">
                             <AlertTriangle size={11} />
                           </button>
                         )}
                       </div>
                     </td>
-                    <td className="px-2 py-0.5">
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">
                       <div className="inline-flex items-center gap-1">
-                        {renderCell(f, 'dischargePort', f.dischargePort || '--', baseText)}
+                        {renderCell(f, 'dischargePort', f.dischargePort || '--', baseText, tone)}
                         {f.dischargePort.split('-').map(p => p.trim()).filter(Boolean).some(p => !anagrafiche.portMappings.find(pm => normalizePortKey(pm.portName) === normalizePortKey(p))) && (
-                          <button onClick={() => openPortPopup(f.dischargePort.split('-').map(p => p.trim()).find(p => !anagrafiche.portMappings.find(pm => normalizePortKey(pm.portName) === normalizePortKey(p))) || f.dischargePort)} className="text-yellow-500 hover:text-yellow-400">
+                          <button type="button" onClick={() => openPortPopup(f.dischargePort.split('-').map(p => p.trim()).find(p => !anagrafiche.portMappings.find(pm => normalizePortKey(pm.portName) === normalizePortKey(p))) || f.dischargePort)} className="text-yellow-500 hover:text-yellow-400">
                             <AlertTriangle size={11} />
                           </button>
                         )}
                       </div>
                     </td>
-                    <td className="px-2 py-0.5">{renderCell(f, 'laycan', displayLaycan(f.laycan) || '--', accentText)}</td>
-                    <td className="px-2 py-0.5">
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'laycan', displayLaycan(f.laycan) || '--', accentText, tone)}</td>
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">
                       <div className="group relative inline-flex items-center gap-1">
-                        {renderCell(f, 'vessel', f.vessel || '--', baseText)}
+                        {renderCell(f, 'vessel', f.vessel || '--', baseText, tone)}
                         {(() => {
                           const vo = anagrafiche.vesselOwners.find(v => v.vesselName === f.vessel);
                           const missing = f.vessel && (!vo || !vo.owner || !vo.dwt || !vo.yob);
-                          return missing ? <button onClick={() => setVesselPopup({ vessel: f.vessel, owner: vo?.owner || '', dwt: vo?.dwt || '', yob: vo?.yob || '' })} className="text-yellow-500 hover:text-yellow-400"><AlertTriangle size={11} /></button> : null;
+                          return missing ? <button type="button" onClick={() => setVesselPopup({ vessel: f.vessel, owner: vo?.owner || '', dwt: vo?.dwt || '', yob: vo?.yob || '' })} className="text-yellow-500 hover:text-yellow-400"><AlertTriangle size={11} /></button> : null;
                         })()}
                         {(() => {
                           const vo = anagrafiche.vesselOwners.find(v => v.vesselName === f.vessel);
@@ -326,17 +357,20 @@ export default function FixturesTable({
                         })()}
                       </div>
                     </td>
-                    <td className="px-2 py-0.5">{renderCell(f, 'rate', f.rate || '--', rateText)}</td>
-                    <td className="px-2 py-0.5">{renderCell(f, 'status', f.status || '--', statusText || mutedText)}</td>
-                    <td className="px-2 py-0.5">{renderCell(f, 'dem', f.dem || '--', mutedText)}</td>
-                    <td className="px-2 py-0.5">{renderCell(f, 'comments', f.comments || '--', mutedText)}</td>
-                    {showAreaCol && <td className={`px-2 py-0.5 ${mutedText}`}>{f.area}</td>}
-                    <td className="px-2 py-0.5 text-right">
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'rate', f.rate || '--', rateText, tone)}</td>
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'status', f.status || '--', statusTone, tone)}</td>
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'dem', f.dem || '--', mutedText, tone)}</td>
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'comments', f.comments || '--', mutedText, tone)}</td>
+                    {showAreaCol && <td className={`border border-neutral-900 px-2 py-0.5 align-middle ${mutedText}`}>{f.area}</td>}
+                    <td className="border border-neutral-900 px-1 py-0.5 text-center align-middle">
+                      <button type="button" onClick={() => setHistoryFixture(f)} className={`text-[12px] leading-none ${isDark ? 'opacity-90 hover:opacity-100' : 'opacity-80 hover:opacity-100'}`} title="Edit history">🕒</button>
+                    </td>
+                    <td className="border border-neutral-900 px-2 py-0.5 text-right align-middle">
                       <div className="flex gap-1 justify-end">
-                        <button onClick={() => onRollover(f.id)} className={`${isDark ? 'text-gray-600 hover:text-green-500' : 'text-slate-400 hover:text-green-500'} transition-colors`} title="Rollover to this week"><CornerUpLeft size={11} /></button>
-                        <button onClick={() => onTogglePrivate(f.id)} className={`${f.private ? 'text-red-500 hover:text-red-400' : `${isDark ? 'text-gray-600 hover:text-red-500' : 'text-slate-400 hover:text-red-500'}`} transition-colors`} title={f.private ? 'Make public' : 'Make private'}><Skull size={11} /></button>
-                        <button onClick={() => onEdit(f)} className={`${isDark ? 'text-gray-600 hover:text-amber-500' : 'text-slate-400 hover:text-amber-600'} transition-colors`}><Edit3 size={11} /></button>
-                        <button onClick={() => onDelete(f.id)} className={`${isDark ? 'text-gray-600 hover:text-red-500' : 'text-slate-400 hover:text-red-500'} transition-colors`}><Trash2 size={11} /></button>
+                        <button type="button" onClick={() => onRollover(f.id)} className={`${isDark ? 'text-gray-200 hover:text-green-300' : 'text-slate-700 hover:text-green-700'} transition-colors`} title="Rollover to this week"><CornerUpLeft size={11} /></button>
+                        <button type="button" onClick={() => onTogglePrivate(f.id)} className={`${f.private ? 'text-red-500 hover:text-red-400' : isDark ? 'text-gray-200 hover:text-red-400' : 'text-slate-700 hover:text-red-600'} transition-colors`} title={f.private ? 'Make public' : 'Make private'}><Skull size={11} /></button>
+                        <button type="button" onClick={() => onEdit(f)} className={`${isDark ? 'text-gray-200 hover:text-amber-400' : 'text-slate-700 hover:text-amber-700'} transition-colors`}><Edit3 size={11} /></button>
+                        <button type="button" onClick={() => onDelete(f.id)} className={`${isDark ? 'text-gray-200 hover:text-red-400' : 'text-slate-700 hover:text-red-600'} transition-colors`}><Trash2 size={11} /></button>
                       </div>
                     </td>
                   </tr>
@@ -347,6 +381,31 @@ export default function FixturesTable({
         </div>
       ))}
     </div>
+    {historyFixture && (
+      <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4" onClick={() => setHistoryFixture(null)}>
+        <div className={`max-h-[80vh] w-full max-w-md overflow-hidden rounded-lg border-2 border-neutral-900 shadow-xl ${isDark ? 'bg-gray-900 text-gray-100' : 'bg-white text-slate-800'}`} onClick={e => e.stopPropagation()}>
+          <div className={`flex items-center justify-between border-b border-neutral-900 px-4 py-2 ${isDark ? 'bg-neutral-950' : 'bg-neutral-100'}`}>
+            <h3 className="text-xs font-bold tracking-wide">EDIT HISTORY</h3>
+            <button type="button" onClick={() => setHistoryFixture(null)} className="text-[10px] opacity-70 hover:opacity-100">CLOSE</button>
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto p-4 space-y-4">
+            {(historyFixture.editHistory || []).length === 0 && (
+              <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-slate-500'}`}>No recorded edits yet.</p>
+            )}
+            {[...(historyFixture.editHistory || [])].reverse().map((e: FieldEdit, idx) => (
+              <div key={idx} className={`border-l-2 border-amber-500 pl-3 text-[11px] ${isDark ? 'text-gray-200' : 'text-slate-700'}`}>
+                <div className="font-semibold text-amber-600 dark:text-amber-400">
+                  {(() => { try { return new Date(e.editedAt).toLocaleString(); } catch { return e.editedAt; } })()}
+                </div>
+                <div className="mt-1"><span className="opacity-70">Field:</span> <span className="font-mono">{e.field}</span></div>
+                <div className="mt-0.5"><span className="opacity-70">Old → New:</span> <span className="font-mono break-all">{e.oldValue || '—'} → {e.newValue || '—'}</span></div>
+                <div className="mt-0.5"><span className="opacity-70">Computer:</span> {e.deviceOwner || '—'}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
     {vesselPopup && (
       <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
         <div className={`${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-slate-200'} border p-6 max-w-md w-full rounded-lg`}>

@@ -19,7 +19,7 @@ interface QuickAddProps {
   onSearchChange: (q: string) => void;
 }
 
-const STATUSES: Status[] = ['', 'SUBS', 'FIXED', 'FAILED', 'REPLACED'];
+const STATUSES: Status[] = ['', 'OPEN', 'SUBS', 'FIXED', 'FAILED', 'REPLACED'];
 
 const initialForm = {
   charterers: '', qty: '', grade: '', loadPort: '', dischargePort: '',
@@ -120,7 +120,6 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
     if (!form.grade.trim()) missing.push('Grade');
     if (!form.loadPort.trim()) missing.push('Load Port');
     if (!form.dischargePort.trim()) missing.push('Disch Port');
-    if (!form.rate.trim()) missing.push('Rate');
     if (missing.length > 0) {
       setPopup({ type: 'validation', missingFields: missing });
       return;
@@ -137,7 +136,7 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
       loadPort: form.loadPort.toUpperCase(),
       dischargePort: form.dischargePort.toUpperCase(),
       laycan, vessel: form.vessel.toUpperCase(),
-      rate: form.rate.toUpperCase(),
+      rate: form.rate.trim().toUpperCase(),
       status: form.status,
       grade: form.grade.toUpperCase().replace(/[^A-Z\s]/g, ''),
       area: area || 'Other',
@@ -293,7 +292,7 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
               </div>
             )}
             <div className="flex flex-col gap-0.5 w-[72px]">
-              <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>RATE*</span>
+              <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>RATE</span>
               <input type="text" value={form.rate} onChange={e => setForm(f => ({ ...f, rate: e.target.value.toUpperCase() }))} placeholder="WS 100" className={inputCls} />
             </div>
             {vesselFirstMode && (

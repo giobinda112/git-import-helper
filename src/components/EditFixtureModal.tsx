@@ -1,20 +1,20 @@
 import { useState } from 'react';
 import type { Fixture, Status, Anagrafiche, FieldEdit } from '../types';
 import { parseLaycan } from '../utils/laycanParser';
-import { todayISO } from '../utils/helpers';
 import AutocompleteInput from './AutocompleteInput';
 import { X, Skull } from 'lucide-react';
 
 interface EditFixtureModalProps {
   fixture: Fixture;
   anagrafiche: Anagrafiche;
+  deviceOwner: string;
   onSave: (fixture: Fixture) => void;
   onClose: () => void;
 }
 
-const STATUSES: Status[] = ['', 'SUBS', 'FIXED', 'FAILED', 'REPLACED'];
+const STATUSES: Status[] = ['', 'OPEN', 'SUBS', 'FIXED', 'FAILED', 'REPLACED'];
 
-export default function EditFixtureModal({ fixture, anagrafiche, onSave, onClose }: EditFixtureModalProps) {
+export default function EditFixtureModal({ fixture, anagrafiche, deviceOwner, onSave, onClose }: EditFixtureModalProps) {
   const [form, setForm] = useState({ ...fixture });
   const isDark = document.documentElement.classList.contains('dark');
   const inputCls = `${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-2 py-1.5 text-xs focus:border-amber-500 focus:outline-none w-full rounded-sm`;
@@ -32,7 +32,7 @@ export default function EditFixtureModal({ fixture, anagrafiche, onSave, onClose
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const today = todayISO();
+    const today = new Date().toISOString();
     const trackedFields: (keyof Fixture)[] = ['charterers', 'qty', 'loadPort', 'dischargePort', 'laycan', 'vessel', 'rate', 'status', 'grade', 'area', 'dem', 'comments', 'position', 'openDate'];
     const newEdits: FieldEdit[] = [];
 
@@ -40,7 +40,7 @@ export default function EditFixtureModal({ fixture, anagrafiche, onSave, onClose
       const oldVal = (fixture[field] as string) || '';
       const newVal = field === 'laycan' ? parseLaycan(form[field]) : (form[field] as string).toUpperCase();
       if (oldVal !== newVal) {
-        newEdits.push({ field, oldValue: oldVal, newValue: newVal, editedAt: today });
+        newEdits.push({ field, oldValue: oldVal, newValue: newVal, editedAt: today, deviceOwner });
       }
     }
 
@@ -52,7 +52,7 @@ export default function EditFixtureModal({ fixture, anagrafiche, onSave, onClose
       loadPort: form.loadPort.toUpperCase(),
       dischargePort: form.dischargePort.toUpperCase(),
       vessel: form.vessel.toUpperCase(),
-      rate: form.rate.toUpperCase(),
+      rate: (form.rate || '').toUpperCase(),
       grade: form.grade.toUpperCase().replace(/[^A-Z\s]/g, ''),
       dem: form.dem.toUpperCase(),
       comments: form.comments.toUpperCase(),
