@@ -300,25 +300,37 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
         <div className={`px-4 py-2 border-b ${borderCls} flex items-center gap-2`}>
           <div className="flex flex-col gap-0.5 flex-1">
             <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>VESSEL NAME</span>
-            <input
-              type="text"
-              value={newVessel}
-              onChange={e => setNewVessel(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && handleAddEntry()}
-              placeholder="Vessel name..."
-              className={inputCls}
-            />
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                value={newVessel}
+                onChange={e => setNewVessel(e.target.value.toUpperCase())}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddEntry(); else if (e.key === 'Tab') handleVesselBlur(); }}
+                onBlur={handleVesselBlur}
+                placeholder="Vessel name..."
+                className={inputCls + ' w-full pr-6'}
+              />
+              {vesselMissing(newVessel) && (
+                <button type="button" onMouseDown={e => e.preventDefault()} onClick={handleVesselBlur} className="absolute right-1 text-yellow-500 hover:text-yellow-400" title="Missing vessel metadata"><AlertTriangle size={12} /></button>
+              )}
+            </div>
           </div>
           <div className="flex flex-col gap-0.5 flex-1">
             <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>PORT</span>
-            <input
-              type="text"
-              value={newPort}
-              onChange={e => setNewPort(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && handleAddEntry()}
-              placeholder="Port..."
-              className={inputCls}
-            />
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                value={newPort}
+                onChange={e => setNewPort(e.target.value.toUpperCase())}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddEntry(); else if (e.key === 'Tab') handlePortBlur(); }}
+                onBlur={handlePortBlur}
+                placeholder="Port..."
+                className={inputCls + ' w-full pr-6'}
+              />
+              {portMissing(newPort) && (
+                <button type="button" onMouseDown={e => e.preventDefault()} onClick={handlePortBlur} className="absolute right-1 text-yellow-500 hover:text-yellow-400" title="Port not in MasterPorts"><AlertTriangle size={12} /></button>
+              )}
+            </div>
           </div>
           <div className="flex flex-col gap-0.5 w-24">
             <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>OPEN DATE</span>
