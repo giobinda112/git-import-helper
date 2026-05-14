@@ -1,15 +1,19 @@
 import { useMemo, useState, useEffect } from 'react';
-import type { Anagrafiche, DwtCategory, VesselOnSubsEntry } from '../types';
+import type { Anagrafiche, Area, DwtCategory, VesselOnSubsEntry } from '../types';
 import { getDwtCategory } from '../types';
 import { todayISO } from '../utils/helpers';
 import { detectArea } from '../utils/areaMapper';
 import { X, Download, Plus, Trash2, AlertTriangle } from 'lucide-react';
+
+const AREA_OPTIONS: Area[] = ['MEG','Red Sea','Indonesia','Med','Black Sea','Continent','WAfrica','Caribs','WAmerica','Other'];
 
 interface VesselOnSubsProps {
   anagrafiche: Anagrafiche;
   entries: VesselOnSubsEntry[];
   onChangeEntries: (entries: VesselOnSubsEntry[]) => void;
   onUpsertVesselMetadata: (vesselName: string, owner: string, dwt: string, yob: string) => void;
+  onUpsertPortArea?: (portName: string, area: Area) => void;
+  onSyncNow?: () => void;
   onClose: () => void;
 }
 
@@ -17,7 +21,7 @@ type GroupMode = 'dwt' | 'area' | 'date';
 
 const DWT_ORDER: DwtCategory[] = ['AFRAMAX', 'SUEZMAX', 'VLCC'];
 
-export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, onUpsertVesselMetadata, onClose }: VesselOnSubsProps) {
+export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, onUpsertVesselMetadata, onUpsertPortArea, onSyncNow, onClose }: VesselOnSubsProps) {
   const [groupMode, setGroupMode] = useState<GroupMode>('date');
   const [newVessel, setNewVessel] = useState('');
   const [newPort, setNewPort] = useState('');
@@ -25,7 +29,33 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
   const [editableText, setEditableText] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [vesselPopup, setVesselPopup] = useState<{ vessel: string; owner: string; dwt: string; yob: string } | null>(null);
+  const [portPopup, setPortPopup] = useState<{ port: string; area: Area } | null>(null);
   const isDark = document.documentElement.classList.contains('dark');
+
+  const vesselMissing = (name: string) => {
+    const v = name.trim().toUpperCase();
+    if (!v) return false;
+    const vo = anagrafiche.vesselOwners.find(x => x.vesselName === v);
+    return !vo || !vo.owner || !vo.dwt || !vo.yob;
+  };
+  const portMissing = (raw: string) => {
+    const p = (raw.split('-')[0] || '').trim().toUpperCase();
+    if (!p) return false;
+    return !anagrafiche.portMappings.find(pm => (pm.portName || '').trim().toUpperCase() === p);
+  };
+  const handleVesselBlur = () => {
+    const v = newVessel.trim().toUpperCase();
+    if (vesselMissing(v)) {
+      const vo = anagrafiche.vesselOwners.find(x => x.vesselName === v);
+      setVesselPopup({ vessel: v, owner: vo?.owner || '', dwt: vo?.dwt || '', yob: vo?.yob || '' });
+    }
+  };
+  const handlePortBlur = () => {
+    const p = (newPort.split('-')[0] || '').trim().toUpperCase();
+    if (portMissing(newPort) && onUpsertPortArea) {
+      setPortPopup({ port: p, area: 'Other' });
+    }
+  };
 
   useEffect(() => {
     const cutoff = Date.now() - (72 * 60 * 60 * 1000);
@@ -54,10 +84,18 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
     setNewVessel('');
     setNewPort('');
     setNewOpenDate('');
+    if (vesselMissing(vessel)) {
+      const vo = anagrafiche.vesselOwners.find(x => x.vesselName === vessel);
+      setVesselPopup({ vessel, owner: vo?.owner || '', dwt: vo?.dwt || '', yob: vo?.yob || '' });
+    } else if (portMissing(port) && onUpsertPortArea) {
+      setPortPopup({ port: (port.split('-')[0] || '').trim().toUpperCase(), area: 'Other' });
+    }
+    onSyncNow?.();
   }
 
   function handleRemoveEntry(id: string) {
     onChangeEntries(entries.filter(e => e.id !== id));
+    onSyncNow?.();
   }
 
   const groupedByDwt = useMemo(() => {
@@ -262,25 +300,37 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
         <div className={`px-4 py-2 border-b ${borderCls} flex items-center gap-2`}>
           <div className="flex flex-col gap-0.5 flex-1">
             <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>VESSEL NAME</span>
-            <input
-              type="text"
-              value={newVessel}
-              onChange={e => setNewVessel(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && handleAddEntry()}
-              placeholder="Vessel name..."
-              className={inputCls}
-            />
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                value={newVessel}
+                onChange={e => setNewVessel(e.target.value.toUpperCase())}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddEntry(); else if (e.key === 'Tab') handleVesselBlur(); }}
+                onBlur={handleVesselBlur}
+                placeholder="Vessel name..."
+                className={inputCls + ' w-full pr-6'}
+              />
+              {vesselMissing(newVessel) && (
+                <button type="button" onMouseDown={e => e.preventDefault()} onClick={handleVesselBlur} className="absolute right-1 text-yellow-500 hover:text-yellow-400" title="Missing vessel metadata"><AlertTriangle size={12} /></button>
+              )}
+            </div>
           </div>
           <div className="flex flex-col gap-0.5 flex-1">
             <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>PORT</span>
-            <input
-              type="text"
-              value={newPort}
-              onChange={e => setNewPort(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && handleAddEntry()}
-              placeholder="Port..."
-              className={inputCls}
-            />
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                value={newPort}
+                onChange={e => setNewPort(e.target.value.toUpperCase())}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddEntry(); else if (e.key === 'Tab') handlePortBlur(); }}
+                onBlur={handlePortBlur}
+                placeholder="Port..."
+                className={inputCls + ' w-full pr-6'}
+              />
+              {portMissing(newPort) && (
+                <button type="button" onMouseDown={e => e.preventDefault()} onClick={handlePortBlur} className="absolute right-1 text-yellow-500 hover:text-yellow-400" title="Port not in MasterPorts"><AlertTriangle size={12} /></button>
+              )}
+            </div>
           </div>
           <div className="flex flex-col gap-0.5 w-24">
             <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>OPEN DATE</span>
@@ -362,8 +412,22 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
               <input value={vesselPopup.dwt} onChange={e => setVesselPopup(prev => prev ? { ...prev, dwt: e.target.value.replace(/[^0-9]/g, '') } : prev)} onKeyDown={e => e.key === 'Enter' && (onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob), setVesselPopup(null))} placeholder="DWT" className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-3 py-2 text-xs w-full mb-2 rounded`} autoFocus={!!vesselPopup.owner && !vesselPopup.dwt} />
               <input value={vesselPopup.yob} onChange={e => setVesselPopup(prev => prev ? { ...prev, yob: e.target.value.replace(/[^0-9]/g, '').slice(0, 4) } : prev)} onKeyDown={e => e.key === 'Enter' && (onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob), setVesselPopup(null))} placeholder="YOB" className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-3 py-2 text-xs w-full mb-4 rounded`} autoFocus={!!vesselPopup.owner && !!vesselPopup.dwt && !vesselPopup.yob} />
               <div className="flex gap-2">
-                <button onClick={() => { onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob); setVesselPopup(null); }} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 text-xs rounded-sm">SAVE</button>
+                <button onClick={() => { onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob); setVesselPopup(null); onSyncNow?.(); }} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 text-xs rounded-sm">SAVE</button>
                 <button onClick={() => setVesselPopup(null)} className={`${isDark ? 'text-gray-500 border-gray-600' : 'text-slate-500 border-slate-200'} px-4 py-2 text-xs border rounded-sm`}>CANCEL</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {portPopup && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60]">
+            <div className={`${isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-slate-200'} border p-6 max-w-md w-full rounded-lg`}>
+              <h3 className={`font-semibold text-sm mb-2 ${isDark ? 'text-amber-500' : 'text-amber-600'}`}>ASSIGN AREA — {portPopup.port}</h3>
+              <select value={portPopup.area} onChange={e => setPortPopup(prev => prev ? { ...prev, area: e.target.value as Area } : prev)} className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-3 py-2 text-xs w-full mb-4 rounded`} autoFocus>
+                {AREA_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+              <div className="flex gap-2">
+                <button onClick={() => { onUpsertPortArea?.(portPopup.port, portPopup.area); setPortPopup(null); onSyncNow?.(); }} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 text-xs rounded-sm">SAVE</button>
+                <button onClick={() => setPortPopup(null)} className={`${isDark ? 'text-gray-500 border-gray-600' : 'text-slate-500 border-slate-200'} px-4 py-2 text-xs border rounded-sm`}>CANCEL</button>
               </div>
             </div>
           </div>

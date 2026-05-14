@@ -543,7 +543,7 @@ function App() {
       {showArchive && <ArchiveModal fixtures={fixturesWithDynamicArea} anagrafiche={anagrafiche} onDelete={deleteFixture} onEdit={setEditingFixture} onRollover={handleRollover} onClose={() => setShowArchive(false)} />}
       {showBulkInsert && <BulkInsertModal anagrafiche={anagrafiche} onBulkAdd={bulkAddFixtures} onClose={() => setShowBulkInsert(false)} />}
       {editingFixture && <EditFixtureModal fixture={editingFixture} anagrafiche={anagrafiche} onSave={saveEditedFixture} onClose={() => setEditingFixture(null)} />}
-      {showVesselOnSubs && <VesselOnSubs anagrafiche={anagrafiche} entries={vesselsOnSubs || []} onChangeEntries={setVesselsOnSubs} onUpsertVesselMetadata={upsertVesselMetadata} onClose={() => setShowVesselOnSubs(false)} />}
+      {showVesselOnSubs && <VesselOnSubs anagrafiche={anagrafiche} entries={vesselsOnSubs || []} onChangeEntries={setVesselsOnSubs} onUpsertVesselMetadata={upsertVesselMetadata} onUpsertPortArea={upsertPortArea} onSyncNow={handleSyncPush} onClose={() => setShowVesselOnSubs(false)} />}
     </div>
   );
 }
