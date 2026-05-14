@@ -21,7 +21,7 @@ type GroupMode = 'dwt' | 'area' | 'date';
 
 const DWT_ORDER: DwtCategory[] = ['AFRAMAX', 'SUEZMAX', 'VLCC'];
 
-export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, onUpsertVesselMetadata, onClose }: VesselOnSubsProps) {
+export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, onUpsertVesselMetadata, onUpsertPortArea, onSyncNow, onClose }: VesselOnSubsProps) {
   const [groupMode, setGroupMode] = useState<GroupMode>('date');
   const [newVessel, setNewVessel] = useState('');
   const [newPort, setNewPort] = useState('');
@@ -29,7 +29,33 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
   const [editableText, setEditableText] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [vesselPopup, setVesselPopup] = useState<{ vessel: string; owner: string; dwt: string; yob: string } | null>(null);
+  const [portPopup, setPortPopup] = useState<{ port: string; area: Area } | null>(null);
   const isDark = document.documentElement.classList.contains('dark');
+
+  const vesselMissing = (name: string) => {
+    const v = name.trim().toUpperCase();
+    if (!v) return false;
+    const vo = anagrafiche.vesselOwners.find(x => x.vesselName === v);
+    return !vo || !vo.owner || !vo.dwt || !vo.yob;
+  };
+  const portMissing = (raw: string) => {
+    const p = (raw.split('-')[0] || '').trim().toUpperCase();
+    if (!p) return false;
+    return !anagrafiche.portMappings.find(pm => (pm.portName || '').trim().toUpperCase() === p);
+  };
+  const handleVesselBlur = () => {
+    const v = newVessel.trim().toUpperCase();
+    if (vesselMissing(v)) {
+      const vo = anagrafiche.vesselOwners.find(x => x.vesselName === v);
+      setVesselPopup({ vessel: v, owner: vo?.owner || '', dwt: vo?.dwt || '', yob: vo?.yob || '' });
+    }
+  };
+  const handlePortBlur = () => {
+    const p = (newPort.split('-')[0] || '').trim().toUpperCase();
+    if (portMissing(newPort) && onUpsertPortArea) {
+      setPortPopup({ port: p, area: 'Other' });
+    }
+  };
 
   useEffect(() => {
     const cutoff = Date.now() - (72 * 60 * 60 * 1000);
