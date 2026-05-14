@@ -1,15 +1,19 @@
 import { useMemo, useState, useEffect } from 'react';
-import type { Anagrafiche, DwtCategory, VesselOnSubsEntry } from '../types';
+import type { Anagrafiche, Area, DwtCategory, VesselOnSubsEntry } from '../types';
 import { getDwtCategory } from '../types';
 import { todayISO } from '../utils/helpers';
 import { detectArea } from '../utils/areaMapper';
 import { X, Download, Plus, Trash2, AlertTriangle } from 'lucide-react';
+
+const AREA_OPTIONS: Area[] = ['MEG','Red Sea','Indonesia','Med','Black Sea','Continent','WAfrica','Caribs','WAmerica','Other'];
 
 interface VesselOnSubsProps {
   anagrafiche: Anagrafiche;
   entries: VesselOnSubsEntry[];
   onChangeEntries: (entries: VesselOnSubsEntry[]) => void;
   onUpsertVesselMetadata: (vesselName: string, owner: string, dwt: string, yob: string) => void;
+  onUpsertPortArea?: (portName: string, area: Area) => void;
+  onSyncNow?: () => void;
   onClose: () => void;
 }
 
