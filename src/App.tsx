@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import type { Fixture, Anagrafiche, Area, SyncData, FieldEdit, VesselOnSubsEntry } from './types';
+import type { Fixture, Anagrafiche, Area, SyncData, FieldEdit, VesselOnSubsEntry, PortMapping } from './types';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useTheme } from './hooks/useTheme';
 import { useSync } from './hooks/useSync';
