@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import type { Fixture, Anagrafiche, Area, SyncData, FieldEdit, VesselOnSubsEntry } from './types';
+import type { Fixture, Anagrafiche, Area, SyncData, FieldEdit, VesselOnSubsEntry, PortMapping } from './types';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useTheme } from './hooks/useTheme';
 import { useSync } from './hooks/useSync';
@@ -170,12 +170,18 @@ function App() {
   }, [fixtures, anagrafiche?.portMappings]);
 
   const handleSyncPush = useCallback(() => {
+    const portsOut = (anagrafiche.portMappings || []).map(pm => ({
+      portName: String(pm.portName || '').trim(),
+      area: String(pm.area || 'Other').trim(),
+      'Port name': String(pm.portName || '').trim(),
+      Area: String(pm.area || 'Other').trim(),
+    }));
     sync({
       fixtures: fixturesForGoogleSheetSync(fixturesWithDynamicArea, anagrafiche.vesselOwners || []),
       anagrafiche,
       vesselsOnSubs: vesselsOnSubs || [],
       masterVessels: anagrafiche.vesselOwners || [],
-      masterPorts: anagrafiche.portMappings || [],
+      masterPorts: portsOut as unknown as PortMapping[],
     });
   }, [sync, fixturesWithDynamicArea, anagrafiche, vesselsOnSubs]);
 
