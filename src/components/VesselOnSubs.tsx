@@ -85,7 +85,7 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
   const groupedByDate = useMemo(() => {
     const groups: Record<string, VesselOnSubsEntry[]> = {};
     for (const f of entries) {
-      const date = f.dateAdded;
+      const date = (f.dateAdded || '').split('T')[0] || 'N/A';
       if (!groups[date]) groups[date] = [];
       groups[date].push(f);
     }
