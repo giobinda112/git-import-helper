@@ -74,7 +74,8 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
   const groupedByArea = useMemo(() => {
     const groups: Record<string, VesselOnSubsEntry[]> = {};
     for (const f of entries) {
-      const area = detectArea(f.port.split('-')[0]?.trim() || f.port, anagrafiche.portMappings) || 'UNKNOWN';
+      const portStr = (f.port || '').toString();
+      const area = detectArea(portStr.split('-')[0]?.trim() || portStr, anagrafiche.portMappings) || 'UNKNOWN';
       if (!groups[area]) groups[area] = [];
       groups[area].push(f);
     }
