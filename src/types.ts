@@ -12,7 +12,7 @@ export type Area =
 
 export type Status = '' | 'OPEN' | 'SUBS' | 'FIXED' | 'FAILED' | 'REPLACED';
 
-export type DwtCategory = 'AFRAMAX' | 'SUEZMAX' | 'VLCC' | '';
+export type DwtCategory = 'SMALL' | 'HANDY' | 'PANAMAX' | 'AFRAMAX' | 'SUEZMAX' | 'VLCC' | '';
 
 export interface FieldEdit {
   field: string;
@@ -44,11 +44,14 @@ export interface Fixture {
   editHistory: FieldEdit[];
   archived: boolean;
   private: boolean;
+  /** Millisecond timestamp of the last local mutation (last-write-wins guard). */
+  updatedAt?: number;
 }
 
 export interface PortMapping {
   portName: string;
   area: Area;
+  updatedAt?: number;
 }
 
 export interface VesselOwner {
@@ -56,6 +59,7 @@ export interface VesselOwner {
   owner: string;
   dwt: string;
   yob: string;
+  updatedAt?: number;
 }
 
 export interface Anagrafiche {
@@ -96,14 +100,25 @@ export interface VesselOnSubsEntry {
   port: string;
   openDate: string;
   dateAdded: string;
+  updatedAt?: number;
 }
 
+/**
+ * DWT brackets (in thousands DWT):
+ *  Small      0 – 24.99
+ *  Handy/MR   25 – 52.99
+ *  Panamax    53 – 69.99
+ *  Aframax    70 – 124.99
+ *  Suezmax    125 – 199.99
+ *  VLCC       200 +
+ */
 export function getDwtCategory(dwt: string): DwtCategory {
   const num = parseInt(dwt, 10);
   if (isNaN(num) || num <= 0) return '';
-  if (num >= 80 && num < 125) return 'AFRAMAX';
-  if (num >= 125 && num < 190) return 'SUEZMAX';
-  if (num >= 190 && num <= 330) return 'VLCC';
-  if (num < 80) return 'AFRAMAX';
+  if (num < 25) return 'SMALL';
+  if (num < 53) return 'HANDY';
+  if (num < 70) return 'PANAMAX';
+  if (num < 125) return 'AFRAMAX';
+  if (num < 200) return 'SUEZMAX';
   return 'VLCC';
 }
