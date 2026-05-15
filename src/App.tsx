@@ -545,8 +545,9 @@ function App() {
 
   function saveEditedFixture(updated: Fixture) {
     const original = (fixtures || []).find(f => f.id === updated.id);
+    const ts = Date.now();
     if (original && original.status !== 'FAILED' && updated.status === 'FAILED') {
-      const archived = { ...updated, archived: true };
+      const archived = { ...updated, archived: true, updatedAt: ts };
       const prevVessel = (original.vessel || '').trim();
       const failTail = prevVessel ? `FAILED ${prevVessel}` : 'FAILED';
       const cm = (updated.comments || '').trim();
@@ -554,32 +555,23 @@ function App() {
       const copy: Fixture = {
         id: generateId(),
         dateAdded: todayISO(),
-        charterers: updated.charterers,
-        qty: updated.qty,
-        loadPort: updated.loadPort,
-        dischargePort: updated.dischargePort,
-        laycan: updated.laycan,
-        vessel: '',
-        rate: '',
-        status: 'OPEN',
-        grade: updated.grade,
-        area: updated.area,
-        dem: updated.dem,
-        comments: openComments,
-        position: '',
-        openDate: '',
-        editHistory: [],
-        archived: false,
-        private: false,
+        charterers: updated.charterers, qty: updated.qty,
+        loadPort: updated.loadPort, dischargePort: updated.dischargePort,
+        laycan: updated.laycan, vessel: '', rate: '', status: 'OPEN',
+        grade: updated.grade, area: updated.area, dem: updated.dem,
+        comments: openComments, position: '', openDate: '',
+        editHistory: [], archived: false, private: false, updatedAt: ts + 1,
       };
       queueFixtureUpsert(updated.id);
-      queueFixtureUpsert(copy.id);
+      // Defer the new OPEN row's POST so the FAILED upsert lands first (avoids duplicate row race on the sheet).
       setFixtures(prev => [copy, ...(prev || []).map(f => f.id === updated.id ? archived : f)]);
+      window.setTimeout(() => queueFixtureUpsert(copy.id), 400);
       updateAnagraficheFromFixture(copy);
     } else {
-      queueFixtureUpsert(updated.id);
-      setFixtures(prev => (prev || []).map(f => f.id === updated.id ? updated : f));
-      updateAnagraficheFromFixture(updated);
+      const u = { ...updated, updatedAt: ts };
+      queueFixtureUpsert(u.id);
+      setFixtures(prev => (prev || []).map(f => f.id === u.id ? u : f));
+      updateAnagraficheFromFixture(u);
     }
     setEditingFixture(null);
   }
