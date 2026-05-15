@@ -425,22 +425,29 @@ function App() {
     });
   }
 
+  function stamp<T extends { updatedAt?: number }>(o: T): T {
+    return { ...o, updatedAt: Date.now() };
+  }
+
   function addFixture(fixture: Fixture) {
-    queueFixtureUpsert(fixture.id);
-    setFixtures(prev => [fixture, ...(prev || [])]);
-    updateAnagraficheFromFixture(fixture);
+    const f = stamp(fixture);
+    queueFixtureUpsert(f.id);
+    setFixtures(prev => [f, ...(prev || [])]);
+    updateAnagraficheFromFixture(f);
   }
 
   function replaceFixture(oldId: string, newFixture: Fixture) {
+    const nf = stamp(newFixture);
     queueFixtureDelete(oldId);
-    queueFixtureUpsert(newFixture.id);
-    setFixtures(prev => [newFixture, ...(prev || []).filter(f => f.id !== oldId)]);
-    updateAnagraficheFromFixture(newFixture);
+    queueFixtureUpsert(nf.id);
+    setFixtures(prev => [nf, ...(prev || []).filter(f => f.id !== oldId)]);
+    updateAnagraficheFromFixture(nf);
   }
 
   function addVesselOwner(vesselName: string, owner: string, dwt: string, yob = '') {
     setAnagrafiche(prev => {
       const existing = prev.vesselOwners.find(vo => vo.vesselName === vesselName);
+      const ts = Date.now();
       if (existing) {
         if ((dwt && !existing.dwt) || (yob && !existing.yob) || (owner && !existing.owner)) {
           return {
@@ -450,12 +457,13 @@ function App() {
               owner: owner || vo.owner,
               dwt: dwt || vo.dwt,
               yob: yob || vo.yob || '',
+              updatedAt: ts,
             } : vo),
           };
         }
         return prev;
       }
-      return { ...prev, vesselOwners: [...prev.vesselOwners, { vesselName, owner, dwt, yob }].sort((a, b) => a.vesselName.localeCompare(b.vesselName)) };
+      return { ...prev, vesselOwners: [...prev.vesselOwners, { vesselName, owner, dwt, yob, updatedAt: ts }].sort((a, b) => a.vesselName.localeCompare(b.vesselName)) };
     });
   }
 
@@ -475,15 +483,16 @@ function App() {
 
   function addPortMapping(portName: string, area: Area) {
     setAnagrafiche(prev => {
+      const ts = Date.now();
       const normalized = normalizePortKey(portName);
       const existingIdx = prev.portMappings.findIndex(pm => normalizePortKey(pm.portName) === normalized);
       if (existingIdx >= 0) {
         const updated = [...prev.portMappings];
-        updated[existingIdx] = { ...updated[existingIdx], area };
+        updated[existingIdx] = { ...updated[existingIdx], area, updatedAt: ts };
         return { ...prev, portMappings: updated };
       }
       const next = !prev.loadPorts.includes(portName) ? { ...prev, loadPorts: uniqueSorted([...prev.loadPorts, portName]) } : prev;
-      return { ...next, portMappings: [...next.portMappings, { portName, area }] };
+      return { ...next, portMappings: [...next.portMappings, { portName, area, updatedAt: ts }] };
     });
   }
 
@@ -496,9 +505,10 @@ function App() {
   }
 
   function bulkAddFixtures(newFixtures: Fixture[]) {
-    for (const f of newFixtures) queueFixtureUpsert(f.id);
-    setFixtures(prev => [...newFixtures, ...(prev || [])]);
-    for (const f of newFixtures) updateAnagraficheFromFixture(f);
+    const stamped = newFixtures.map(stamp);
+    for (const f of stamped) queueFixtureUpsert(f.id);
+    setFixtures(prev => [...stamped, ...(prev || [])]);
+    for (const f of stamped) updateAnagraficheFromFixture(f);
   }
 
   function deleteFixture(id: string) {
@@ -509,7 +519,7 @@ function App() {
 
   function togglePrivate(id: string) {
     queueFixtureUpsert(id);
-    setFixtures(prev => (prev || []).map(f => f.id === id ? { ...f, private: !f.private } : f));
+    setFixtures(prev => (prev || []).map(f => f.id === id ? { ...f, private: !f.private, updatedAt: Date.now() } : f));
   }
 
   function rolloverFixture(id: string) {
@@ -517,7 +527,8 @@ function App() {
     const list = fixtures || [];
     const original = list.find(f => f.id === id);
     if (!original) return;
-    const archived = { ...original, archived: true };
+    const ts = Date.now();
+    const archived = { ...original, archived: true, updatedAt: ts };
     const edit: FieldEdit = { field: 'dateAdded', oldValue: original.dateAdded, newValue: today, ...auditMeta() };
     const rolled: Fixture = {
       ...original,
@@ -525,6 +536,7 @@ function App() {
       dateAdded: today,
       editHistory: [...original.editHistory, edit],
       archived: false,
+      updatedAt: ts,
     };
     queueFixtureUpsert(id);
     queueFixtureUpsert(rolled.id);
