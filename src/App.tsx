@@ -151,15 +151,26 @@ function App() {
         const normalized = rows.map(f => normalizeFixtureAfterPull(f as unknown as Record<string, unknown>));
         setFixtures(prev => {
           const local = prev || [];
-          // Protection: never wipe local with empty payload (likely fetch/parse failure or sheet still recalculating)
           if (normalized.length === 0 && local.length > 0) {
             console.log('[sync] Empty fixtures from server — keeping local data');
             return local;
           }
-          // Merge: keep any local row not present on server (newly POSTed rows the sheet has not yet echoed back)
-          const serverIds = new Set(normalized.map(f => f.id));
-          const localOnly = local.filter(f => !serverIds.has(f.id));
-          return [...localOnly, ...normalized];
+          // Last-write-wins: never let an incoming row overwrite a local row with a newer updatedAt.
+          const localById = new Map(local.map(f => [f.id, f]));
+          const out: Fixture[] = [];
+          const seen = new Set<string>();
+          for (const inc of normalized) {
+            const lo = localById.get(inc.id);
+            if (lo && (lo.updatedAt || 0) > (inc.updatedAt || 0)) {
+              out.push(lo);
+            } else {
+              out.push(inc);
+            }
+            seen.add(inc.id);
+          }
+          // Keep local-only rows the server has not echoed back yet.
+          for (const lo of local) if (!seen.has(lo.id)) out.push(lo);
+          return out;
         });
       }
       if (data.masterVessels != null || data.masterPorts != null || data.anagrafiche) {
@@ -167,14 +178,32 @@ function App() {
           const merged = normalizeAnagraficheShape(prev, pickSafeAnagraficheFromServer(data.anagrafiche));
           let vesselOwnersNorm =
             data.masterVessels != null ? normalizeMasterVesselsList(data.masterVessels) : merged.vesselOwners;
-          /** Empty master list from Sheet often means read/map failed — do not wipe local (next push would erase Sheet). */
           if (data.masterVessels != null && vesselOwnersNorm.length === 0 && merged.vesselOwners.length > 0) {
             vesselOwnersNorm = merged.vesselOwners;
+          } else if (data.masterVessels != null) {
+            // LWW per vessel
+            const incMap = new Map(vesselOwnersNorm.map(v => [v.vesselName, v]));
+            vesselOwnersNorm = vesselOwnersNorm.map(v => {
+              const lo = (merged.vesselOwners || []).find(x => x.vesselName === v.vesselName);
+              return lo && (lo.updatedAt || 0) > (v.updatedAt || 0) ? lo : v;
+            });
+            for (const lo of merged.vesselOwners || []) {
+              if (!incMap.has(lo.vesselName)) vesselOwnersNorm.push(lo);
+            }
           }
           let portMappingsNorm =
             data.masterPorts != null ? normalizeMasterPortsList(data.masterPorts) : merged.portMappings;
           if (data.masterPorts != null && portMappingsNorm.length === 0 && merged.portMappings.length > 0) {
             portMappingsNorm = merged.portMappings;
+          } else if (data.masterPorts != null) {
+            const incMap = new Map(portMappingsNorm.map(p => [p.portName, p]));
+            portMappingsNorm = portMappingsNorm.map(p => {
+              const lo = (merged.portMappings || []).find(x => x.portName === p.portName);
+              return lo && (lo.updatedAt || 0) > (p.updatedAt || 0) ? lo : p;
+            });
+            for (const lo of merged.portMappings || []) {
+              if (!incMap.has(lo.portName)) portMappingsNorm.push(lo);
+            }
           }
           return {
             ...merged,
@@ -185,7 +214,6 @@ function App() {
       }
       if (data.vesselsOnSubs !== undefined && data.vesselsOnSubs !== null) {
         const rawList = Array.isArray(data.vesselsOnSubs) ? data.vesselsOnSubs : [];
-        // Strict mapping to schema: id|dateAdded|vessel|owner|dwt|yob|position|openDate|comments|archived
         const next: VesselOnSubsEntry[] = rawList
           .map((r: unknown) => {
             const o = (r ?? {}) as Record<string, unknown>;
@@ -194,16 +222,32 @@ function App() {
             const vessel = String(o.vessel ?? '').trim().toUpperCase();
             if (!vessel) return null;
             const position = String(o.position ?? (o as Record<string, unknown>).port ?? '').trim().toUpperCase();
+            const updatedAtRaw = Number(o.updatedAt ?? 0);
             return {
               id: String(o.id ?? `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
               vessel,
               port: position,
               openDate: String(o.openDate ?? '').trim(),
               dateAdded: String(o.dateAdded ?? '').trim(),
+              updatedAt: Number.isFinite(updatedAtRaw) ? updatedAtRaw : 0,
             } as VesselOnSubsEntry;
           })
           .filter((x): x is VesselOnSubsEntry => x !== null);
-        setVesselsOnSubs(prev => (next.length === 0 && (prev || []).length > 0 ? prev : next));
+        setVesselsOnSubs(prev => {
+          const local = prev || [];
+          if (next.length === 0 && local.length > 0) return local;
+          // LWW per id, keep local-only rows
+          const localById = new Map(local.map(e => [e.id, e]));
+          const out: VesselOnSubsEntry[] = [];
+          const seen = new Set<string>();
+          for (const inc of next) {
+            const lo = localById.get(inc.id);
+            out.push(lo && (lo.updatedAt || 0) > (inc.updatedAt || 0) ? lo : inc);
+            seen.add(inc.id);
+          }
+          for (const lo of local) if (!seen.has(lo.id)) out.push(lo);
+          return out;
+        });
       }
     } catch (e) {
       console.error('[App] handleSyncData failed:', e);
