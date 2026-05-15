@@ -150,6 +150,7 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
       comments: form.comments.toUpperCase(),
       position: '', openDate: '',
       editHistory: [], archived: false, private: false,
+      updatedAt: Date.now(),
     };
 
     // Duplicate check: ONLY if vessel is filled
