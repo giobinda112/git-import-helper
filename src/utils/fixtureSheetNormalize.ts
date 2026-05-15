@@ -57,6 +57,7 @@ export function normalizeFixtureAfterPull(raw: Record<string, unknown>): Fixture
   }
   if (!Array.isArray(editHistory)) editHistory = [];
 
+  const updatedAtRaw = Number(raw.updatedAt ?? 0);
   return {
     id: String(raw.id ?? ''),
     dateAdded,
@@ -77,6 +78,7 @@ export function normalizeFixtureAfterPull(raw: Record<string, unknown>): Fixture
     editHistory: editHistory as FieldEdit[],
     archived: Boolean(raw.archived),
     private: Boolean(raw.private),
+    updatedAt: Number.isFinite(updatedAtRaw) ? updatedAtRaw : 0,
   };
 }
 
