@@ -106,7 +106,13 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
     }
   }
   function handleDischPortBlur() {
-    // Just sync to master data lists, no popup needed
+    const val = form.dischargePort.trim().toUpperCase();
+    if (!val) return;
+    const ports = val.split('-').map(p => p.trim()).filter(Boolean);
+    const missingPorts = ports.filter(p => !anagrafiche.portMappings.find(pm => pm.portName === p));
+    if (missingPorts.length > 0) {
+      setPopup({ type: 'area', portName: missingPorts[0], pendingPorts: missingPorts });
+    }
   }
 
   // ENTER or ADD button: validate and save
@@ -144,6 +150,7 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
       comments: form.comments.toUpperCase(),
       position: '', openDate: '',
       editHistory: [], archived: false, private: false,
+      updatedAt: Date.now(),
     };
 
     // Duplicate check: ONLY if vessel is filled

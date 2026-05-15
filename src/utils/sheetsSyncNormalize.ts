@@ -9,11 +9,13 @@ export function normalizeVesselOwnerRow(row: unknown): VesselOwner | null {
     o.vesselName ?? o.name ?? (o as Record<string, string>).Vessel ?? '',
   ).trim();
   if (!vesselName) return null;
+  const u = Number(o.updatedAt ?? 0);
   return {
     vesselName,
     owner: String(o.owner ?? ''),
     dwt: String(o.dwt ?? ''),
     yob: String(o.yob ?? ''),
+    updatedAt: Number.isFinite(u) ? u : 0,
   };
 }
 
@@ -30,12 +32,12 @@ export function normalizePortMappingRow(row: unknown): PortMapping | null {
     }
     return '';
   };
-  // Strict: spreadsheet column headers are exactly "Port name" and "Area".
   const portName = pick('Port name', 'Port Name', 'portName', 'Port', 'port', 'name');
   if (!portName) return null;
   const rawArea = pick('Area', 'area');
   const area: Area = canonicalArea(rawArea || 'Other');
-  return { portName, area };
+  const u = Number(o.updatedAt ?? 0);
+  return { portName, area, updatedAt: Number.isFinite(u) ? u : 0 };
 }
 
 export function normalizeMasterVesselsList(rows: unknown): VesselOwner[] {

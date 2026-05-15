@@ -66,9 +66,7 @@ export default function AutocompleteInput({
       e.preventDefault();
       setHighlighted(h => Math.max(h - 1, 0));
     } else if (e.key === 'Tab') {
-      // Smart TAB: accept current suggestion, then let focus move naturally
-      const idx = highlighted >= 0 ? highlighted : 0;
-      if (filtered[idx]) applySuggestion(filtered[idx]);
+      // Tab only shifts focus — never auto-fills. Use Arrow + Enter or click to pick a suggestion.
       setShowDropdown(false);
       setIsTyping(false);
       setHighlighted(-1);

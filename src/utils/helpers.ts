@@ -10,6 +10,11 @@ export function todayISO(): string {
   return new Date().toISOString().split('T')[0];
 }
 
+/** Millisecond timestamp used by the universal last-write-wins guard across all sheets. */
+export function nowMs(): number {
+  return Date.now();
+}
+
 export function uniqueSorted(arr: string[]): string[] {
   return [...new Set(arr.map(s => s.trim()).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b, undefined, { sensitivity: 'base' })

@@ -151,15 +151,26 @@ function App() {
         const normalized = rows.map(f => normalizeFixtureAfterPull(f as unknown as Record<string, unknown>));
         setFixtures(prev => {
           const local = prev || [];
-          // Protection: never wipe local with empty payload (likely fetch/parse failure or sheet still recalculating)
           if (normalized.length === 0 && local.length > 0) {
             console.log('[sync] Empty fixtures from server — keeping local data');
             return local;
           }
-          // Merge: keep any local row not present on server (newly POSTed rows the sheet has not yet echoed back)
-          const serverIds = new Set(normalized.map(f => f.id));
-          const localOnly = local.filter(f => !serverIds.has(f.id));
-          return [...localOnly, ...normalized];
+          // Last-write-wins: never let an incoming row overwrite a local row with a newer updatedAt.
+          const localById = new Map(local.map(f => [f.id, f]));
+          const out: Fixture[] = [];
+          const seen = new Set<string>();
+          for (const inc of normalized) {
+            const lo = localById.get(inc.id);
+            if (lo && (lo.updatedAt || 0) > (inc.updatedAt || 0)) {
+              out.push(lo);
+            } else {
+              out.push(inc);
+            }
+            seen.add(inc.id);
+          }
+          // Keep local-only rows the server has not echoed back yet.
+          for (const lo of local) if (!seen.has(lo.id)) out.push(lo);
+          return out;
         });
       }
       if (data.masterVessels != null || data.masterPorts != null || data.anagrafiche) {
@@ -167,14 +178,32 @@ function App() {
           const merged = normalizeAnagraficheShape(prev, pickSafeAnagraficheFromServer(data.anagrafiche));
           let vesselOwnersNorm =
             data.masterVessels != null ? normalizeMasterVesselsList(data.masterVessels) : merged.vesselOwners;
-          /** Empty master list from Sheet often means read/map failed — do not wipe local (next push would erase Sheet). */
           if (data.masterVessels != null && vesselOwnersNorm.length === 0 && merged.vesselOwners.length > 0) {
             vesselOwnersNorm = merged.vesselOwners;
+          } else if (data.masterVessels != null) {
+            // LWW per vessel
+            const incMap = new Map(vesselOwnersNorm.map(v => [v.vesselName, v]));
+            vesselOwnersNorm = vesselOwnersNorm.map(v => {
+              const lo = (merged.vesselOwners || []).find(x => x.vesselName === v.vesselName);
+              return lo && (lo.updatedAt || 0) > (v.updatedAt || 0) ? lo : v;
+            });
+            for (const lo of merged.vesselOwners || []) {
+              if (!incMap.has(lo.vesselName)) vesselOwnersNorm.push(lo);
+            }
           }
           let portMappingsNorm =
             data.masterPorts != null ? normalizeMasterPortsList(data.masterPorts) : merged.portMappings;
           if (data.masterPorts != null && portMappingsNorm.length === 0 && merged.portMappings.length > 0) {
             portMappingsNorm = merged.portMappings;
+          } else if (data.masterPorts != null) {
+            const incMap = new Map(portMappingsNorm.map(p => [p.portName, p]));
+            portMappingsNorm = portMappingsNorm.map(p => {
+              const lo = (merged.portMappings || []).find(x => x.portName === p.portName);
+              return lo && (lo.updatedAt || 0) > (p.updatedAt || 0) ? lo : p;
+            });
+            for (const lo of merged.portMappings || []) {
+              if (!incMap.has(lo.portName)) portMappingsNorm.push(lo);
+            }
           }
           return {
             ...merged,
@@ -185,7 +214,6 @@ function App() {
       }
       if (data.vesselsOnSubs !== undefined && data.vesselsOnSubs !== null) {
         const rawList = Array.isArray(data.vesselsOnSubs) ? data.vesselsOnSubs : [];
-        // Strict mapping to schema: id|dateAdded|vessel|owner|dwt|yob|position|openDate|comments|archived
         const next: VesselOnSubsEntry[] = rawList
           .map((r: unknown) => {
             const o = (r ?? {}) as Record<string, unknown>;
@@ -194,16 +222,32 @@ function App() {
             const vessel = String(o.vessel ?? '').trim().toUpperCase();
             if (!vessel) return null;
             const position = String(o.position ?? (o as Record<string, unknown>).port ?? '').trim().toUpperCase();
+            const updatedAtRaw = Number(o.updatedAt ?? 0);
             return {
               id: String(o.id ?? `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
               vessel,
               port: position,
               openDate: String(o.openDate ?? '').trim(),
               dateAdded: String(o.dateAdded ?? '').trim(),
+              updatedAt: Number.isFinite(updatedAtRaw) ? updatedAtRaw : 0,
             } as VesselOnSubsEntry;
           })
           .filter((x): x is VesselOnSubsEntry => x !== null);
-        setVesselsOnSubs(prev => (next.length === 0 && (prev || []).length > 0 ? prev : next));
+        setVesselsOnSubs(prev => {
+          const local = prev || [];
+          if (next.length === 0 && local.length > 0) return local;
+          // LWW per id, keep local-only rows
+          const localById = new Map(local.map(e => [e.id, e]));
+          const out: VesselOnSubsEntry[] = [];
+          const seen = new Set<string>();
+          for (const inc of next) {
+            const lo = localById.get(inc.id);
+            out.push(lo && (lo.updatedAt || 0) > (inc.updatedAt || 0) ? lo : inc);
+            seen.add(inc.id);
+          }
+          for (const lo of local) if (!seen.has(lo.id)) out.push(lo);
+          return out;
+        });
       }
     } catch (e) {
       console.error('[App] handleSyncData failed:', e);
@@ -381,22 +425,29 @@ function App() {
     });
   }
 
+  function stamp<T extends { updatedAt?: number }>(o: T): T {
+    return { ...o, updatedAt: Date.now() };
+  }
+
   function addFixture(fixture: Fixture) {
-    queueFixtureUpsert(fixture.id);
-    setFixtures(prev => [fixture, ...(prev || [])]);
-    updateAnagraficheFromFixture(fixture);
+    const f = stamp(fixture);
+    queueFixtureUpsert(f.id);
+    setFixtures(prev => [f, ...(prev || [])]);
+    updateAnagraficheFromFixture(f);
   }
 
   function replaceFixture(oldId: string, newFixture: Fixture) {
+    const nf = stamp(newFixture);
     queueFixtureDelete(oldId);
-    queueFixtureUpsert(newFixture.id);
-    setFixtures(prev => [newFixture, ...(prev || []).filter(f => f.id !== oldId)]);
-    updateAnagraficheFromFixture(newFixture);
+    queueFixtureUpsert(nf.id);
+    setFixtures(prev => [nf, ...(prev || []).filter(f => f.id !== oldId)]);
+    updateAnagraficheFromFixture(nf);
   }
 
   function addVesselOwner(vesselName: string, owner: string, dwt: string, yob = '') {
     setAnagrafiche(prev => {
       const existing = prev.vesselOwners.find(vo => vo.vesselName === vesselName);
+      const ts = Date.now();
       if (existing) {
         if ((dwt && !existing.dwt) || (yob && !existing.yob) || (owner && !existing.owner)) {
           return {
@@ -406,12 +457,13 @@ function App() {
               owner: owner || vo.owner,
               dwt: dwt || vo.dwt,
               yob: yob || vo.yob || '',
+              updatedAt: ts,
             } : vo),
           };
         }
         return prev;
       }
-      return { ...prev, vesselOwners: [...prev.vesselOwners, { vesselName, owner, dwt, yob }].sort((a, b) => a.vesselName.localeCompare(b.vesselName)) };
+      return { ...prev, vesselOwners: [...prev.vesselOwners, { vesselName, owner, dwt, yob, updatedAt: ts }].sort((a, b) => a.vesselName.localeCompare(b.vesselName)) };
     });
   }
 
@@ -431,15 +483,16 @@ function App() {
 
   function addPortMapping(portName: string, area: Area) {
     setAnagrafiche(prev => {
+      const ts = Date.now();
       const normalized = normalizePortKey(portName);
       const existingIdx = prev.portMappings.findIndex(pm => normalizePortKey(pm.portName) === normalized);
       if (existingIdx >= 0) {
         const updated = [...prev.portMappings];
-        updated[existingIdx] = { ...updated[existingIdx], area };
+        updated[existingIdx] = { ...updated[existingIdx], area, updatedAt: ts };
         return { ...prev, portMappings: updated };
       }
       const next = !prev.loadPorts.includes(portName) ? { ...prev, loadPorts: uniqueSorted([...prev.loadPorts, portName]) } : prev;
-      return { ...next, portMappings: [...next.portMappings, { portName, area }] };
+      return { ...next, portMappings: [...next.portMappings, { portName, area, updatedAt: ts }] };
     });
   }
 
@@ -452,9 +505,10 @@ function App() {
   }
 
   function bulkAddFixtures(newFixtures: Fixture[]) {
-    for (const f of newFixtures) queueFixtureUpsert(f.id);
-    setFixtures(prev => [...newFixtures, ...(prev || [])]);
-    for (const f of newFixtures) updateAnagraficheFromFixture(f);
+    const stamped = newFixtures.map(stamp);
+    for (const f of stamped) queueFixtureUpsert(f.id);
+    setFixtures(prev => [...stamped, ...(prev || [])]);
+    for (const f of stamped) updateAnagraficheFromFixture(f);
   }
 
   function deleteFixture(id: string) {
@@ -465,7 +519,7 @@ function App() {
 
   function togglePrivate(id: string) {
     queueFixtureUpsert(id);
-    setFixtures(prev => (prev || []).map(f => f.id === id ? { ...f, private: !f.private } : f));
+    setFixtures(prev => (prev || []).map(f => f.id === id ? { ...f, private: !f.private, updatedAt: Date.now() } : f));
   }
 
   function rolloverFixture(id: string) {
@@ -473,7 +527,8 @@ function App() {
     const list = fixtures || [];
     const original = list.find(f => f.id === id);
     if (!original) return;
-    const archived = { ...original, archived: true };
+    const ts = Date.now();
+    const archived = { ...original, archived: true, updatedAt: ts };
     const edit: FieldEdit = { field: 'dateAdded', oldValue: original.dateAdded, newValue: today, ...auditMeta() };
     const rolled: Fixture = {
       ...original,
@@ -481,6 +536,7 @@ function App() {
       dateAdded: today,
       editHistory: [...original.editHistory, edit],
       archived: false,
+      updatedAt: ts,
     };
     queueFixtureUpsert(id);
     queueFixtureUpsert(rolled.id);
@@ -489,8 +545,9 @@ function App() {
 
   function saveEditedFixture(updated: Fixture) {
     const original = (fixtures || []).find(f => f.id === updated.id);
+    const ts = Date.now();
     if (original && original.status !== 'FAILED' && updated.status === 'FAILED') {
-      const archived = { ...updated, archived: true };
+      const archived = { ...updated, archived: true, updatedAt: ts };
       const prevVessel = (original.vessel || '').trim();
       const failTail = prevVessel ? `FAILED ${prevVessel}` : 'FAILED';
       const cm = (updated.comments || '').trim();
@@ -498,32 +555,23 @@ function App() {
       const copy: Fixture = {
         id: generateId(),
         dateAdded: todayISO(),
-        charterers: updated.charterers,
-        qty: updated.qty,
-        loadPort: updated.loadPort,
-        dischargePort: updated.dischargePort,
-        laycan: updated.laycan,
-        vessel: '',
-        rate: '',
-        status: 'OPEN',
-        grade: updated.grade,
-        area: updated.area,
-        dem: updated.dem,
-        comments: openComments,
-        position: '',
-        openDate: '',
-        editHistory: [],
-        archived: false,
-        private: false,
+        charterers: updated.charterers, qty: updated.qty,
+        loadPort: updated.loadPort, dischargePort: updated.dischargePort,
+        laycan: updated.laycan, vessel: '', rate: '', status: 'OPEN',
+        grade: updated.grade, area: updated.area, dem: updated.dem,
+        comments: openComments, position: '', openDate: '',
+        editHistory: [], archived: false, private: false, updatedAt: ts + 1,
       };
       queueFixtureUpsert(updated.id);
-      queueFixtureUpsert(copy.id);
+      // Defer the new OPEN row's POST so the FAILED upsert lands first (avoids duplicate row race on the sheet).
       setFixtures(prev => [copy, ...(prev || []).map(f => f.id === updated.id ? archived : f)]);
+      window.setTimeout(() => queueFixtureUpsert(copy.id), 400);
       updateAnagraficheFromFixture(copy);
     } else {
-      queueFixtureUpsert(updated.id);
-      setFixtures(prev => (prev || []).map(f => f.id === updated.id ? updated : f));
-      updateAnagraficheFromFixture(updated);
+      const u = { ...updated, updatedAt: ts };
+      queueFixtureUpsert(u.id);
+      setFixtures(prev => (prev || []).map(f => f.id === u.id ? u : f));
+      updateAnagraficheFromFixture(u);
     }
     setEditingFixture(null);
   }
