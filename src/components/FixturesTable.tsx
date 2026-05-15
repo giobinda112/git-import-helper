@@ -278,6 +278,7 @@ export default function FixturesTable({
   const hdrSub = isDark ? 'text-gray-400' : 'text-slate-600';
   const thCls = 'border border-neutral-900 text-left px-2 py-1 font-semibold text-[10px] align-middle';
   const hoverBg = isDark ? 'hover:brightness-110' : 'hover:brightness-95';
+  const rowBase = isDark ? 'bg-slate-950' : 'bg-white';
   const barBg = isDark ? 'bg-gray-900/50 border-neutral-900' : 'bg-slate-50 border-neutral-900';
   const barText = isDark ? 'text-gray-500' : 'text-slate-400';
   const inputCls = `${isDark ? 'bg-gray-800 border-amber-500 text-gray-100' : 'bg-white border-amber-500 text-slate-800'} border px-1 py-0 text-xs focus:outline-none rounded-sm w-full`;
@@ -320,10 +321,10 @@ export default function FixturesTable({
           </label>
         </div>
       )}
-      {grouped.map(({ week, fixtures: weekFixtures }) => (
-        <div key={week} className="mb-px">
+      {grouped.map(({ key, label, fixtures: weekFixtures }) => (
+        <div key={key} className="mb-px">
           <div className={`${hdrBg} px-4 py-1.5 border border-neutral-900 sticky top-0 z-10`}>
-            <span className="font-semibold text-xs tracking-wide">{week}</span>
+            <span className="font-semibold text-xs tracking-wide">{label}</span>
             <span className={`${hdrSub} text-xs ml-3`}>{weekFixtures.length} fixture{weekFixtures.length !== 1 ? 's' : ''}</span>
           </div>
           <table className="w-full text-xs border-collapse border border-neutral-900">
@@ -367,7 +368,7 @@ export default function FixturesTable({
                 const rateText = tone.rate;
 
                 return (
-                  <tr key={f.id} className={`border border-neutral-900 border-l-[3px] ${statusBorder} ${selectedIds.has(f.id) ? 'ring-2 ring-inset ring-amber-400' : ''} ${hoverBg} transition-[filter]`}>
+                  <tr key={f.id} className={`border border-neutral-900 border-l-[3px] ${statusBorder} ${tone.row || rowBase} ${selectedIds.has(f.id) ? 'ring-2 ring-inset ring-amber-400' : ''} ${hoverBg} transition-[filter]`}>
                     <td className="border border-neutral-900 px-2 py-0.5 align-middle"><input type="checkbox" checked={selectedIds.has(f.id)} onChange={() => onToggleSelect(f.id)} className="accent-amber-500 cursor-pointer" /></td>
                     <td className="border border-neutral-900 px-1 py-0.5 align-middle">
                       {f.private && <span title="Private"><Skull size={11} className="text-red-500" /></span>}

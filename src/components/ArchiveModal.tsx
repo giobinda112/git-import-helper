@@ -39,7 +39,7 @@ export default function ArchiveModal({ fixtures, anagrafiche, onDelete, onEdit, 
   const [laycanTo, setLaycanTo] = useState('');
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
 
-  let filtered = fixtures;
+  let filtered = fixtures.filter(f => f.archived);
 
   // Text search
   if (searchQuery) {

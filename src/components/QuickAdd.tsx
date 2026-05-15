@@ -17,6 +17,7 @@ interface QuickAddProps {
   onAddPortMapping: (portName: string, area: Area) => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
+  isDark: boolean;
 }
 
 const STATUSES: Status[] = ['', 'OPEN', 'SUBS', 'FIXED', 'FAILED', 'REPLACED'];
@@ -34,7 +35,7 @@ type PopupState =
   | { type: 'validation'; missingFields: string[] }
   | null;
 
-export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixture, onAddVesselOwner, onAddCharterer, onAddGrade, onAddPortMapping, searchQuery, onSearchChange }: QuickAddProps) {
+export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixture, onAddVesselOwner, onAddCharterer, onAddGrade, onAddPortMapping, searchQuery, onSearchChange, isDark }: QuickAddProps) {
   const [form, setForm] = useState(initialForm);
   const [popup, setPopup] = useState<PopupState>(null);
   const [ownerInput, setOwnerInput] = useState('');
@@ -218,20 +219,19 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
   function handleDuplicateKeepBoth() { if (popup?.type === 'duplicate') { onAdd(popup.newFixture); setForm({ ...initialForm }); onSearchChange(''); setPopup(null); } }
   function handleDuplicateIgnore() { setPopup(null); }
 
-  const isDark = document.documentElement.classList.contains('dark');
-  const inputCls = `${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-2 py-1 text-xs focus:border-amber-500 focus:outline-none w-full rounded-sm`;
-  const modalBg = isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-slate-200';
-  const textMuted = isDark ? 'text-gray-400' : 'text-slate-500';
+  const inputCls = `${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-neutral-50 border-neutral-300 text-black'} border px-2 py-1 text-xs focus:border-amber-500 focus:outline-none w-full rounded-sm`;
+  const modalBg = isDark ? 'bg-gray-900 border-gray-600' : 'bg-neutral-50 border-neutral-200';
+  const textMuted = isDark ? 'text-gray-400' : 'text-neutral-500';
 
   return (
     <>
-      <div className={`${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-slate-200'} border-b p-2.5`}>
+      <div className={`${isDark ? 'bg-gray-900 border-gray-700' : 'bg-neutral-50 border-neutral-200'} border-b p-2.5`}>
         {/* Data Entry Form */}
         <form onSubmit={handleSubmit}>
           <div className="flex items-end gap-1.5 text-xs flex-wrap">
             {vesselFirstMode && (
               <div className="flex flex-col gap-0.5 w-[100px]">
-                <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>VESSEL</span>
+                <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>VESSEL</span>
                 <div className="flex items-center gap-1">
                   <div className="flex-1">
                     <AutocompleteInput value={form.vessel} onChange={handleVesselChange} onBlur={handleVesselBlur} suggestions={anagrafiche.vessels} placeholder="VESSEL" className={inputCls} />
@@ -242,31 +242,31 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
             )}
             {!vesselFirstMode && <div className="flex flex-col gap-0.5 w-[100px]">
               <div className="flex items-center justify-between">
-                <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>CHARTERER*</span>
-                <button type="button" tabIndex={-1} onClick={() => setVesselFirstMode(v => !v)} className={`${isDark ? 'text-gray-500 hover:text-amber-400' : 'text-slate-400 hover:text-amber-600'} text-[10px]`} title="Toggle input order">⇅</button>
+                <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>CHARTERER*</span>
+                <button type="button" tabIndex={-1} onClick={() => setVesselFirstMode(v => !v)} className={`${isDark ? 'text-gray-500 hover:text-amber-400' : 'text-neutral-900 hover:text-amber-600'} text-[10px]`} title="Toggle input order">⇅</button>
               </div>
               <AutocompleteInput value={form.charterers} onChange={v => setForm(f => ({ ...f, charterers: v }))} onBlur={handleChartererBlur} suggestions={anagrafiche.charterers} placeholder="CHARTERER" className={inputCls} />
             </div>}
             {vesselFirstMode && <div className="flex flex-col gap-0.5 w-[24px]">
-              <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>&nbsp;</span>
-              <button type="button" tabIndex={-1} onClick={() => setVesselFirstMode(v => !v)} className={`${isDark ? 'text-gray-500 hover:text-amber-400' : 'text-slate-400 hover:text-amber-600'} text-[12px] border ${isDark ? 'border-gray-700' : 'border-slate-200'} h-[26px] rounded-sm`} title="Toggle input order">⇅</button>
+              <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>&nbsp;</span>
+              <button type="button" tabIndex={-1} onClick={() => setVesselFirstMode(v => !v)} className={`${isDark ? 'text-gray-500 hover:text-amber-400' : 'text-neutral-900 hover:text-amber-600'} text-[12px] border ${isDark ? 'border-gray-700' : 'border-neutral-300'} h-[26px] rounded-sm`} title="Toggle input order">⇅</button>
             </div>}
             <div className="flex flex-col gap-0.5 w-[48px]">
-              <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>QTY*</span>
+              <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>QTY*</span>
               <input type="text" value={form.qty} onChange={e => handleQtyChange(e.target.value)} placeholder="QTY" className={inputCls} />
             </div>
             <div className="flex flex-col gap-0.5 w-[72px]">
-              <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>GRADE*</span>
+              <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>GRADE*</span>
               <input type="text" value={form.grade} onChange={e => handleGradeChange(e.target.value)} onBlur={handleGradeBlur} placeholder="GRADE" className={inputCls} />
             </div>
             {vesselFirstMode && (
               <div className="flex flex-col gap-0.5 w-[88px]">
-                <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>LAYCAN</span>
+                <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>LAYCAN</span>
                 <input type="text" value={form.laycan} onChange={e => setForm(f => ({ ...f, laycan: e.target.value.toUpperCase() }))} placeholder="12-14/05" className={inputCls} />
               </div>
             )}
             <div className="flex flex-col gap-0.5 w-[100px]">
-              <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>LOAD PORT*</span>
+              <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>LOAD PORT*</span>
               <div className="flex items-center gap-1">
                 <div className="flex-1">
                   <AutocompleteInput value={form.loadPort} onChange={handleLoadPortChange} onBlur={handleLoadPortBlur} suggestions={anagrafiche.loadPorts} placeholder="LOAD PORT" className={inputCls} />
@@ -275,7 +275,7 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
               </div>
             </div>
             <div className="flex flex-col gap-0.5 w-[100px]">
-              <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>DISCH PORT*</span>
+              <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>DISCH PORT*</span>
               <div className="flex items-center gap-1">
                 <div className="flex-1">
                   <AutocompleteInput value={form.dischargePort} onChange={v => setForm(f => ({ ...f, dischargePort: v }))} onBlur={handleDischPortBlur} suggestions={anagrafiche.dischargePorts} placeholder="DISCH PORT" className={inputCls} />
@@ -284,12 +284,12 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
               </div>
             </div>
             {!vesselFirstMode && <div className="flex flex-col gap-0.5 w-[88px]">
-              <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>LAYCAN</span>
+              <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>LAYCAN</span>
               <input type="text" value={form.laycan} onChange={e => setForm(f => ({ ...f, laycan: e.target.value.toUpperCase() }))} placeholder="12-14/05" className={inputCls} />
             </div>}
             {!vesselFirstMode && (
               <div className="flex flex-col gap-0.5 w-[100px]">
-                <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>VESSEL</span>
+                <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>VESSEL</span>
                 <div className="flex items-center gap-1">
                   <div className="flex-1">
                     <AutocompleteInput value={form.vessel} onChange={handleVesselChange} onBlur={handleVesselBlur} suggestions={anagrafiche.vessels} placeholder="VESSEL" className={inputCls} />
@@ -299,27 +299,27 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
               </div>
             )}
             <div className="flex flex-col gap-0.5 w-[72px]">
-              <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>RATE</span>
+              <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>RATE</span>
               <input type="text" value={form.rate} onChange={e => setForm(f => ({ ...f, rate: e.target.value.toUpperCase() }))} placeholder="WS 100" className={inputCls} />
             </div>
             {vesselFirstMode && (
               <div className="flex flex-col gap-0.5 w-[100px]">
-                <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>CHARTERER*</span>
+                <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>CHARTERER*</span>
                 <AutocompleteInput value={form.charterers} onChange={v => setForm(f => ({ ...f, charterers: v }))} onBlur={handleChartererBlur} suggestions={anagrafiche.charterers} placeholder="CHARTERER" className={inputCls} />
               </div>
             )}
             <div className="flex flex-col gap-0.5 w-[56px]">
-              <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>STATUS</span>
+              <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>STATUS</span>
               <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as Status }))} className={inputCls}>
                 {STATUSES.map(s => <option key={s || '_empty_'} value={s}>{s || '--'}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-0.5 w-[56px]">
-              <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>DEM</span>
+              <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>DEM</span>
               <input type="text" value={form.dem} onChange={e => setForm(f => ({ ...f, dem: e.target.value.toUpperCase() }))} placeholder="DEM" className={inputCls} />
             </div>
             <div className="flex flex-col gap-0.5 w-[120px]">
-              <span className={`${isDark ? 'text-gray-500' : 'text-slate-400'} text-[9px] font-medium`}>COMMENTS</span>
+              <span className={`${isDark ? 'text-gray-500' : 'text-neutral-900'} text-[9px] font-medium`}>COMMENTS</span>
               <input type="text" value={form.comments} onChange={e => setForm(f => ({ ...f, comments: e.target.value.toUpperCase() }))} placeholder="COMMENTS" className={inputCls} />
             </div>
             <div className="flex items-end">
@@ -356,10 +356,10 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
           <div className={`${modalBg} border p-6 max-w-md w-full rounded-lg`}>
             <h3 className={`font-semibold text-sm mb-2 ${isDark ? 'text-amber-500' : 'text-amber-600'}`}>AREA NOT RECOGNIZED</h3>
             <p className={`${textMuted} text-xs mb-4`}>Select area for port: <span className="font-medium">{popup.portName}</span></p>
-            {popup.pendingPorts.length > 1 && <p className={`${isDark ? 'text-gray-600' : 'text-slate-400'} text-[10px] mb-3`}>Remaining ports to assign: {popup.pendingPorts.filter(p => p !== popup.portName).join(', ')}</p>}
+            {popup.pendingPorts.length > 1 && <p className={`${isDark ? 'text-gray-600' : 'text-neutral-900'} text-[10px] mb-3`}>Remaining ports to assign: {popup.pendingPorts.filter(p => p !== popup.portName).join(', ')}</p>}
             <div className="grid grid-cols-3 gap-2">
               {(['MEG', 'Red Sea', 'Indonesia', 'Med', 'Continent', 'WAfrica', 'Caribs', 'WAmerica', 'Other'] as Area[]).map(a => (
-                <button key={a} onClick={() => handleAreaSelect(a)} className={`${isDark ? 'bg-gray-800 hover:bg-amber-600 text-gray-300 border-gray-600' : 'bg-slate-50 hover:bg-amber-500 text-slate-600 border-slate-200'} hover:text-white px-3 py-2 text-xs border hover:border-amber-500 transition-colors rounded`}>{a}</button>
+                <button key={a} onClick={() => handleAreaSelect(a)} className={`${isDark ? 'bg-gray-800 hover:bg-amber-600 text-gray-300 border-gray-600' : 'bg-slate-50 hover:bg-amber-500 text-slate-600 border-neutral-300'} hover:text-white px-3 py-2 text-xs border hover:border-amber-500 transition-colors rounded`}>{a}</button>
               ))}
             </div>
             <button onClick={() => setPopup(null)} className={`mt-4 ${textMuted} text-xs`}>Cancel</button>
@@ -376,7 +376,7 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
             <input type="text" value={ownerInput} onChange={e => setOwnerInput(e.target.value.toUpperCase())} onKeyDown={e => e.key === 'Enter' && handleOwnerSubmit()} placeholder="Owner name..." className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-3 py-2 text-xs focus:border-amber-500 focus:outline-none w-full mb-4 rounded`} autoFocus />
             <div className="flex gap-2">
               <button onClick={handleOwnerSubmit} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 text-xs font-semibold transition-colors rounded-sm">SAVE OWNER</button>
-              <button onClick={handleOwnerSkip} className={`${isDark ? 'text-gray-500 hover:text-gray-300 border-gray-600' : 'text-slate-400 hover:text-slate-600 border-slate-200'} px-4 py-2 text-xs border transition-colors rounded-sm`}>SKIP</button>
+              <button onClick={handleOwnerSkip} className={`${isDark ? 'text-gray-500 hover:text-gray-300 border-gray-600' : 'text-neutral-900 hover:text-slate-600 border-neutral-300'} px-4 py-2 text-xs border transition-colors rounded-sm`}>SKIP</button>
             </div>
           </div>
         </div>
@@ -393,7 +393,7 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
             <input type="text" value={yobInput} onChange={e => setYobInput(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))} onKeyDown={e => e.key === 'Enter' && handleVesselMetaSubmit()} placeholder="BUILT (YYYY)" className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-3 py-2 text-xs focus:border-amber-500 focus:outline-none w-full mb-4 rounded`} />
             <div className="flex gap-2">
               <button onClick={handleVesselMetaSubmit} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 text-xs font-semibold transition-colors rounded-sm">SAVE</button>
-              <button onClick={handleVesselMetaSkip} className={`${isDark ? 'text-gray-500 hover:text-gray-300 border-gray-600' : 'text-slate-400 hover:text-slate-600 border-slate-200'} px-4 py-2 text-xs border transition-colors rounded-sm`}>SKIP</button>
+              <button onClick={handleVesselMetaSkip} className={`${isDark ? 'text-gray-500 hover:text-gray-300 border-gray-600' : 'text-neutral-900 hover:text-slate-600 border-neutral-300'} px-4 py-2 text-xs border transition-colors rounded-sm`}>SKIP</button>
             </div>
           </div>
         </div>
@@ -405,11 +405,11 @@ export default function QuickAdd({ anagrafiche, fixtures, onAdd, onReplaceFixtur
           <div className={`${isDark ? 'bg-gray-900 border-red-800' : 'bg-white border-red-300'} border p-6 max-w-md w-full rounded-lg`}>
             <h3 className="text-red-500 font-semibold text-sm mb-2">VESSEL GIA A SOGGETTI</h3>
             <p className={`${textMuted} text-xs mb-2`}><span className="font-medium">{popup.vessel}</span> was already entered within the last 14 days.</p>
-            <p className={`${isDark ? 'text-gray-600' : 'text-slate-400'} text-[10px] mb-4`}>Previous: {popup.existingFixture.charterers} / {popup.existingFixture.loadPort} / {popup.existingFixture.laycan}</p>
+            <p className={`${isDark ? 'text-gray-600' : 'text-neutral-900'} text-[10px] mb-4`}>Previous: {popup.existingFixture.charterers} / {popup.existingFixture.loadPort} / {popup.existingFixture.laycan}</p>
             <div className="flex gap-2">
               <button onClick={handleDuplicateReplace} className="bg-red-700 hover:bg-red-600 text-white px-3 py-2 text-xs font-semibold transition-colors rounded-sm">REPLACE</button>
               <button onClick={handleDuplicateKeepBoth} className={`${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-slate-200 hover:bg-slate-300'} text-white px-3 py-2 text-xs font-semibold transition-colors rounded-sm`}>KEEP BOTH</button>
-              <button onClick={handleDuplicateIgnore} className={`${isDark ? 'bg-gray-800 hover:bg-gray-700 border-gray-600' : 'bg-slate-50 hover:bg-slate-100 border-slate-200'} text-gray-400 px-3 py-2 text-xs font-semibold border transition-colors rounded-sm`}>IGNORE</button>
+              <button onClick={handleDuplicateIgnore} className={`${isDark ? 'bg-gray-800 hover:bg-gray-700 border-gray-600' : 'bg-slate-50 hover:bg-slate-100 border-neutral-300'} text-gray-400 px-3 py-2 text-xs font-semibold border transition-colors rounded-sm`}>IGNORE</button>
             </div>
           </div>
         </div>

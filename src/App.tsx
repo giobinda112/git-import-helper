@@ -137,12 +137,31 @@ function App() {
   const { theme, toggleTheme } = useTheme();
   const [sessionOk, setSessionOk] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [topPanelHeight, setTopPanelHeight] = useState(420);
+  const [isResizing, setIsResizing] = useState(false);
 
   useEffect(() => {
     if (slideSessionIfValid()) setSessionOk(true);
     else setSessionOk(false);
     setSessionChecked(true);
   }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!isResizing) return;
+      const nextHeight = Math.max(220, Math.min(window.innerHeight - 180, event.clientY));
+      setTopPanelHeight(nextHeight);
+    };
+
+    const stopResizing = () => setIsResizing(false);
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', stopResizing);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [isResizing]);
 
   const handleSyncData = useCallback((data: SyncData) => {
     try {
@@ -275,13 +294,40 @@ function App() {
   }, [webhookUrl, pull]);
 
   const updateAnagrafiche = useCallback((newAnagrafiche: Anagrafiche) => {
-    setAnagrafiche(newAnagrafiche);
-  }, [setAnagrafiche]);
+    setAnagrafiche(prev => {
+      const samePortMappings = prev.portMappings.length === newAnagrafiche.portMappings.length &&
+        prev.portMappings.every(prevPm => {
+          const match = newAnagrafiche.portMappings.find(nextPm => normalizePortKey(nextPm.portName) === normalizePortKey(prevPm.portName));
+          return match && canonicalArea(match.area) === canonicalArea(prevPm.area);
+        });
+
+      if (!samePortMappings) {
+        setFixtures(prevFixtures => {
+          if (!prevFixtures) return prevFixtures;
+          return prevFixtures.map(fixture => {
+            const ports = [
+              ...(fixture.loadPort?.split('-').map(p => p.trim()).filter(Boolean) || []),
+              ...(fixture.dischargePort?.split('-').map(p => p.trim()).filter(Boolean) || []),
+            ];
+            const dynamicArea = ports.map(port => detectArea(port, newAnagrafiche.portMappings)).find(Boolean);
+            const resolvedArea = canonicalArea(dynamicArea || fixture.area || 'Other');
+            return resolvedArea === fixture.area ? fixture : { ...fixture, area: resolvedArea, updatedAt: Date.now() };
+          });
+        });
+      }
+
+      return newAnagrafiche;
+    });
+  }, [setAnagrafiche, setFixtures]);
 
   const fixturesWithDynamicArea = useMemo(() => {
+    const mappings = anagrafiche?.portMappings || [];
     return (fixtures || []).map(f => {
-      const firstLoadPort = f.loadPort?.split('-')[0]?.trim() || '';
-      const dynamicArea = detectArea(firstLoadPort, anagrafiche?.portMappings || []);
+      const ports = [
+        ...(f.loadPort?.split('-').map(p => p.trim()).filter(Boolean) || []),
+        ...(f.dischargePort?.split('-').map(p => p.trim()).filter(Boolean) || []),
+      ];
+      const dynamicArea = ports.map(port => detectArea(port, mappings)).find(Boolean);
       const resolved = dynamicArea || f.area || 'Other';
       return { ...f, area: canonicalArea(resolved) };
     });
@@ -704,8 +750,8 @@ function App() {
     : 'text-slate-500 hover:text-amber-600 border-slate-200 hover:border-amber-500';
 
   return (
-    <div className={`h-screen flex flex-col overflow-hidden ${isDark ? 'bg-gray-950 text-gray-100' : 'bg-white text-slate-800'}`}>
-      <header className={`${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-slate-200'} border-b px-4 py-2 flex items-center justify-between shrink-0`}>
+    <div className={`h-screen flex flex-col overflow-hidden ${isDark ? 'bg-neutral-900 text-white' : 'bg-neutral-50 text-neutral-900'}`}>
+      <header className={`${isDark ? 'bg-gray-900 border-gray-700' : 'bg-neutral-50 border-neutral-200'} border-b px-4 py-2 flex items-center justify-between shrink-0`}>
         <div className="flex items-center gap-3">
           <Anchor size={18} className="text-amber-500" />
           <h1 className={`font-bold text-sm tracking-widest ${isDark ? 'text-amber-500' : 'text-amber-600'}`}>SHIP FIXTURES</h1>
@@ -749,10 +795,11 @@ function App() {
         onAdd={addFixture} onReplaceFixture={replaceFixture} onAddVesselOwner={addVesselOwner}
         onAddCharterer={addCharterer} onAddGrade={addGrade} onAddPortMapping={addPortMapping}
         searchQuery={searchQuery} onSearchChange={setSearchQuery}
+        isDark={isDark}
       />
 
-      <div className="flex-1 overflow-hidden flex flex-col">
-        <div className="h-1/2 min-h-0 flex flex-col border-b border-neutral-900/10">
+      <div className="flex-1 overflow-hidden flex flex-col select-none">
+        <div style={{ height: topPanelHeight }} className={`min-h-[220px] flex flex-col border-b ${isDark ? 'border-gray-800' : 'border-slate-200'}`}>
           <div className={`px-4 py-2 flex items-center justify-between ${isDark ? 'border-b border-gray-800' : 'border-b border-slate-200'}`}>
             <div>
               <div className="text-[10px] uppercase tracking-[0.25em] text-amber-500">TOP VIEW</div>
@@ -767,12 +814,16 @@ function App() {
               onTogglePrivate={togglePrivate} onRollover={rolloverFixture}
               onUpsertVesselMetadata={upsertVesselMetadata} onUpsertPortArea={upsertPortArea}
               selectedIds={selectedIds} onToggleSelect={toggleSelect} onSelectAll={selectAll} onDeselectAll={deselectAll} maxWeeks={5}
-              viewVariant="standard"
+              viewVariant="standard" isDark={isDark}
             />
           </div>
         </div>
-
-        <div className="h-1/2 min-h-0 flex flex-col">
+        <div
+          className={`h-2 cursor-row-resize ${isDark ? 'bg-gray-900/80 hover:bg-gray-700' : 'bg-slate-100 hover:bg-slate-200'} transition-colors`}
+          onMouseDown={e => { e.preventDefault(); setIsResizing(true); }}
+          title="Drag to resize"
+        />
+        <div className="flex-1 min-h-0 flex flex-col">
           <div className={`px-4 py-2 flex flex-col gap-2 ${isDark ? 'border-b border-gray-800' : 'border-b border-slate-200'}`}>
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -781,15 +832,13 @@ function App() {
               </div>
               <div className="text-[10px] text-slate-400">{`${(fixturesWithDynamicArea || []).filter(f => !f.archived && f.status !== 'FAILED' && (!selectedArea || f.area === selectedArea)).length} visible fixtures`}</div>
             </div>
-            <div className="relative w-full max-w-xl">
-              <input
-                type="text"
-                value={searchQueryBottom}
-                onChange={e => setSearchQueryBottom(e.target.value)}
-                placeholder="Search secondary view..."
-                className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-200' : 'bg-slate-50 border-slate-300 text-slate-800'} border w-full pl-3 pr-3 py-2 text-xs rounded-sm focus:outline-none focus:ring-2 focus:ring-amber-400`}
-              />
-            </div>
+            <QuickAdd
+              anagrafiche={anagrafiche} fixtures={fixtures || []}
+              onAdd={addFixture} onReplaceFixture={replaceFixture} onAddVesselOwner={addVesselOwner}
+              onAddCharterer={addCharterer} onAddGrade={addGrade} onAddPortMapping={addPortMapping}
+              searchQuery={searchQueryBottom} onSearchChange={setSearchQueryBottom}
+              isDark={isDark}
+            />
           </div>
           <div className="flex-1 min-h-0 overflow-hidden">
             <FixturesTable
@@ -798,16 +847,16 @@ function App() {
               onTogglePrivate={togglePrivate} onRollover={rolloverFixture}
               onUpsertVesselMetadata={upsertVesselMetadata} onUpsertPortArea={upsertPortArea}
               selectedIds={selectedIds} onToggleSelect={toggleSelect} onSelectAll={selectAll} onDeselectAll={deselectAll} maxWeeks={5}
-              viewVariant="vessel"
+              viewVariant="vessel" isDark={isDark}
             />
           </div>
         </div>
       </div>
 
-      <div className={`border-t ${isDark ? 'border-gray-800 bg-gray-950/80' : 'border-slate-200 bg-slate-50'} px-4 py-3 flex flex-wrap gap-2 items-center overflow-x-auto shrink-0`}>
+      <div className={`w-full border-t ${isDark ? 'border-gray-800 bg-neutral-950/80' : 'border-neutral-200 bg-neutral-100'} px-4 py-4 flex flex-wrap gap-3 items-center overflow-x-auto shrink-0`}>
         <span className="text-[10px] uppercase tracking-[0.2em] text-amber-500">Geographic areas</span>
         {ALL_AREAS.map(area => (
-          <button key={area} onClick={() => setSelectedArea(selectedArea === area ? null : area)} className={`px-3 py-1 text-[10px] rounded-sm transition-colors ${selectedArea === area ? 'bg-amber-600 text-white' : `${isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-white text-slate-600 hover:bg-slate-100'}`} border border-neutral-900/10`}>
+          <button key={area} onClick={() => setSelectedArea(selectedArea === area ? null : area)} className={`min-w-[96px] px-4 py-3 text-[11px] rounded-sm font-semibold transition-colors ${selectedArea === area ? 'bg-amber-600 text-white border-transparent shadow-sm' : `${isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-neutral-100 text-neutral-900 hover:bg-neutral-200'}`} border border-neutral-900/10`}>
             {area}
           </button>
         ))}
