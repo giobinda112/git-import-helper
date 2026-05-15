@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import type { Anagrafiche, Area } from '../types';
-import { ALL_AREAS } from '../utils/areaMapper';
+import { ALL_AREAS, canonicalArea } from '../utils/areaMapper';
 import { X, Plus, Trash2, Check, Search, Pencil } from 'lucide-react';
 
 interface DataManagementProps {
@@ -65,7 +65,7 @@ export default function DataManagement({ anagrafiche, onUpdate, onClose }: DataM
       section: 'VESSELS & OWNERS',
       items: vo.map((item) => {
         const realIdx = anagrafiche.vesselOwners.indexOf(item);
-        return { label: `${item.vesselName} -> ${item.owner} (DWT: ${item.dwt || '--'} | YOB: ${item.yob || '--'})`, section: 'VESSELS & OWNERS', onDelete: () => removeVesselOwner(realIdx), onEdit: () => {} };
+        return { label: `${item.vesselName} -> ${item.owner} (DWT: ${item.dwt || '--'} | BUILT: ${item.yob || '--'})`, section: 'VESSELS & OWNERS', onDelete: () => removeVesselOwner(realIdx), onEdit: () => {} };
       })
     });
 
@@ -98,7 +98,7 @@ export default function DataManagement({ anagrafiche, onUpdate, onClose }: DataM
   function addPortMapping() {
     const name = newPortName.trim().toUpperCase(); if (!name) return;
     if (anagrafiche.portMappings.some(pm => pm.portName === name)) return;
-    onUpdate({ ...anagrafiche, portMappings: [...anagrafiche.portMappings, { portName: name, area: newPortArea }].sort((a, b) => a.portName.localeCompare(b.portName)) }); setNewPortName('');
+    onUpdate({ ...anagrafiche, portMappings: [...anagrafiche.portMappings, { portName: name, area: canonicalArea(newPortArea) }].sort((a, b) => a.portName.localeCompare(b.portName)) }); setNewPortName('');
   }
 
   function removeSimpleItem(field: 'charterers' | 'grades', index: number) {
@@ -128,7 +128,7 @@ export default function DataManagement({ anagrafiche, onUpdate, onClose }: DataM
     const { field, index } = editingIndex;
     const val = editValue.trim().toUpperCase(); if (!val) { setEditingIndex(null); return; }
     if (field === 'portMappingName') { const list = [...anagrafiche.portMappings]; list[index] = { ...list[index], portName: val }; onUpdate({ ...anagrafiche, portMappings: list }); }
-    else if (field === 'portMappingArea') { const list = [...anagrafiche.portMappings]; list[index] = { ...list[index], area: val as Area }; onUpdate({ ...anagrafiche, portMappings: list }); }
+    else if (field === 'portMappingArea') { const list = [...anagrafiche.portMappings]; list[index] = { ...list[index], area: canonicalArea(val) }; onUpdate({ ...anagrafiche, portMappings: list }); }
     else { const list = [...(anagrafiche[field as keyof Anagrafiche] as string[])]; list[index] = val; onUpdate({ ...anagrafiche, [field]: list }); }
     setEditingIndex(null);
   }
@@ -218,7 +218,7 @@ export default function DataManagement({ anagrafiche, onUpdate, onClose }: DataM
                     <input type="text" value={newVesselName} onChange={e => setNewVesselName(e.target.value.toUpperCase())} placeholder="Vessel name..." className={`${inputCls} flex-1`} />
                     <input type="text" value={newVesselOwner} onChange={e => setNewVesselOwner(e.target.value.toUpperCase())} placeholder="Owner..." className={`${inputCls} flex-1`} />
                     <input type="text" value={newVesselDwt} onChange={e => setNewVesselDwt(e.target.value.replace(/[^0-9]/g, ''))} placeholder="DWT (000s)" className={`${inputCls} w-20`} />
-                    <input type="text" value={newVesselYob} onChange={e => setNewVesselYob(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))} placeholder="YOB" className={`${inputCls} w-16`} />
+                    <input type="text" value={newVesselYob} onChange={e => setNewVesselYob(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))} placeholder="BUILT" className={`${inputCls} w-16`} />
                     <button onClick={addVesselOwner} className="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 text-xs rounded-sm"><Plus size={14} /></button>
                   </div>
                   <div className="flex gap-1 mb-3">
@@ -234,7 +234,7 @@ export default function DataManagement({ anagrafiche, onUpdate, onClose }: DataM
                           <input type="text" value={vo.vesselName} onChange={e => updateVesselOwner(i, 'vesselName', e.target.value)} className={`${inputCls} w-36`} />
                           <input type="text" value={vo.owner} onChange={e => updateVesselOwner(i, 'owner', e.target.value)} className={`${inputCls} flex-1`} placeholder="Owner..." />
                           <input type="text" value={vo.dwt} onChange={e => updateVesselOwner(i, 'dwt', e.target.value)} className={`${inputCls} w-16`} placeholder="DWT" />
-                          <input type="text" value={vo.yob || ''} onChange={e => updateVesselOwner(i, 'yob', e.target.value)} className={`${inputCls} w-16`} placeholder="YOB" />
+                          <input type="text" value={vo.yob || ''} onChange={e => updateVesselOwner(i, 'yob', e.target.value)} className={`${inputCls} w-16`} placeholder="BUILT" />
                           <button onClick={() => removeVesselOwner(i)} className={`${isDark ? 'text-gray-600 hover:text-red-500' : 'text-slate-400 hover:text-red-500'}`}><Trash2 size={12} /></button>
                         </div>
                       ))}
@@ -250,7 +250,7 @@ export default function DataManagement({ anagrafiche, onUpdate, onClose }: DataM
                               <input type="text" value={vo.vesselName} onChange={e => updateVesselOwner(i, 'vesselName', e.target.value)} className={`${inputCls} w-36`} />
                               <input type="text" value={vo.owner} onChange={e => updateVesselOwner(i, 'owner', e.target.value)} className={`${inputCls} flex-1`} placeholder="Owner..." />
                               <input type="text" value={vo.dwt} onChange={e => updateVesselOwner(i, 'dwt', e.target.value)} className={`${inputCls} w-16`} placeholder="DWT" />
-                              <input type="text" value={vo.yob || ''} onChange={e => updateVesselOwner(i, 'yob', e.target.value)} className={`${inputCls} w-16`} placeholder="YOB" />
+                              <input type="text" value={vo.yob || ''} onChange={e => updateVesselOwner(i, 'yob', e.target.value)} className={`${inputCls} w-16`} placeholder="BUILT" />
                               <button onClick={() => removeVesselOwner(i)} className={`${isDark ? 'text-gray-600 hover:text-red-500' : 'text-slate-400 hover:text-red-500'}`}><Trash2 size={12} /></button>
                             </div>
                           );

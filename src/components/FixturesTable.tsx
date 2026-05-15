@@ -10,6 +10,7 @@ interface FixturesTableProps {
   anagrafiche: Anagrafiche;
   selectedArea: string | null;
   searchQuery: string;
+  viewVariant?: 'standard' | 'vessel';
   onDelete: (id: string) => void;
   onEdit: (fixture: Fixture) => void;
   onInlineEdit: (fixtureId: string, field: string, newValue: string) => void;
@@ -37,7 +38,38 @@ const STATUS_TEXT_LIGHT: Record<string, string> = {
   SUBS: 'text-yellow-700', FIXED: 'text-green-700', FAILED: 'text-red-700', REPLACED: 'text-blue-700',
 };
 
+type Group = { key: string; label: string; fixtures: Fixture[] };
+
 type DateCat = 'today' | 'today-rolled' | 'yesterday' | 'yesterday-modified' | null;
+
+function groupByWeek(fixtures: Fixture[]): Group[] {
+  const groups = new Map<string, Fixture[]>();
+  for (const fixture of fixtures) {
+    const week = getISOWeek(fixture.dateAdded || '');
+    groups.set(week, [...(groups.get(week) || []), fixture]);
+  }
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => b.localeCompare(a, undefined, { sensitivity: 'base' }))
+    .map(([week, weekFixtures]) => ({ key: week, label: week, fixtures: weekFixtures }));
+}
+
+function groupByArea(fixtures: Fixture[], selectedArea: string | null): Group[] {
+  const groups = new Map<string, Fixture[]>();
+  for (const fixture of fixtures) {
+    const area = fixture.area || 'Other';
+    groups.set(area, [...(groups.get(area) || []), fixture]);
+  }
+  const orderedAreas = Array.from(groups.keys()).sort((a, b) => {
+    if (selectedArea && a === selectedArea) return -1;
+    if (selectedArea && b === selectedArea) return 1;
+    return a.localeCompare(b, undefined, { sensitivity: 'base' });
+  });
+  return orderedAreas.map(area => ({
+    key: area,
+    label: selectedArea && area === selectedArea ? `${area} (selected area)` : area,
+    fixtures: groups.get(area) || [],
+  }));
+}
 
 /** Match calendar day for ISO timestamps or legacy yyyy-mm-dd `editedAt` values. */
 function sameCalendarDay(isoOrDate: string, yyyyMmDd: string): boolean {
@@ -116,7 +148,7 @@ function isFieldModifiedToday(fixture: Fixture, field: string): boolean {
 const INLINE_FIELDS = ['charterers', 'qty', 'grade', 'loadPort', 'dischargePort', 'laycan', 'vessel', 'rate', 'status', 'dem', 'comments'];
 
 export default function FixturesTable({
-  fixtures, anagrafiche, selectedArea, searchQuery, onDelete, onEdit, onInlineEdit, onTogglePrivate, onRollover,
+  fixtures, anagrafiche, selectedArea, searchQuery, viewVariant = 'standard', onDelete, onEdit, onInlineEdit, onTogglePrivate, onRollover,
   onUpsertVesselMetadata, onUpsertPortArea,
   selectedIds, onToggleSelect, onSelectAll, onDeselectAll, maxWeeks,
 }: FixturesTableProps) {
@@ -171,7 +203,21 @@ export default function FixturesTable({
   }
 
   const showAreaCol = !selectedArea;
-  const columns: { field: SortField; label: string; width: string }[] = [
+  const columns: { field: SortField; label: string; width: string }[] = viewVariant === 'vessel' ? [
+    { field: 'dateAdded', label: 'DATE', width: 'w-[72px]' },
+    { field: 'vessel', label: 'VESSEL', width: 'w-[100px]' },
+    { field: 'qty', label: 'QTY', width: 'w-[44px]' },
+    { field: 'grade', label: 'GRADE', width: 'w-[72px]' },
+    { field: 'laycan', label: 'LAYCAN', width: 'w-[88px]' },
+    { field: 'loadPort', label: 'LOAD PORT', width: 'w-[100px]' },
+    { field: 'dischargePort', label: 'DISCH PORT', width: 'w-[100px]' },
+    { field: 'rate', label: 'RATE', width: 'w-[72px]' },
+    { field: 'charterers', label: 'CHARTERERS', width: 'w-[100px]' },
+    { field: 'status', label: 'STATUS', width: 'w-[56px]' },
+    { field: 'dem', label: 'DEM', width: 'w-[56px]' },
+    { field: 'comments', label: 'COMMENTS', width: 'w-[120px]' },
+    ...(showAreaCol ? [{ field: 'area' as SortField, label: 'AREA', width: 'w-[56px]' }] : []),
+  ] : [
     { field: 'dateAdded', label: 'DATE', width: 'w-[72px]' },
     { field: 'charterers', label: 'CHARTERERS', width: 'w-[100px]' },
     { field: 'qty', label: 'QTY', width: 'w-[44px]' },
@@ -187,7 +233,7 @@ export default function FixturesTable({
     ...(showAreaCol ? [{ field: 'area' as SortField, label: 'AREA', width: 'w-[56px]' }] : []),
   ];
 
-  const grouped = groupByWeek(sorted);
+  const grouped = searchQuery ? groupByArea(sorted, selectedArea) : groupByWeek(sorted);
 
   function startInlineEdit(fixtureId: string, field: string, currentValue: string) {
     if (!INLINE_FIELDS.includes(field)) return;
@@ -299,22 +345,35 @@ export default function FixturesTable({
                 const cat = getDateCategory(f);
                 const tone = getRowTone(cat, isDark);
                 const statusBorder = STATUS_BORDER[f.status] || 'border-l-transparent';
-                const statusTone = cat
-                  ? tone.muted
-                  : (isDark ? STATUS_TEXT_DARK[f.status] || tone.muted : STATUS_TEXT_LIGHT[f.status] || tone.muted);
+                const statusBadge = f.status === 'SUBS'
+                  ? 'bg-amber-400 text-slate-900 font-semibold'
+                  : f.status === 'FIXED'
+                    ? 'bg-emerald-600 text-white font-semibold'
+                    : f.status === 'FAILED'
+                      ? 'bg-red-600 text-white font-semibold'
+                      : f.status === 'REPLACED'
+                        ? 'bg-blue-600 text-white font-semibold'
+                        : `${isDark ? 'text-gray-200' : 'text-slate-700'}`;
+                const chartererCellBase = cat === 'today'
+                  ? 'bg-[#1e3a8a] text-white font-semibold'
+                  : cat === 'yesterday'
+                    ? 'bg-[#facc15] text-slate-900 font-semibold'
+                    : (cat === 'today-rolled' || cat === 'yesterday-modified')
+                      ? 'bg-[#059669] text-white font-semibold'
+                      : tone.text;
                 const baseText = tone.text;
                 const mutedText = tone.muted;
                 const accentText = tone.accent;
                 const rateText = tone.rate;
 
                 return (
-                  <tr key={f.id} className={`border border-neutral-900 border-l-[3px] ${statusBorder} ${tone.row} ${selectedIds.has(f.id) ? 'ring-2 ring-inset ring-amber-400' : ''} ${hoverBg} transition-[filter]`}>
+                  <tr key={f.id} className={`border border-neutral-900 border-l-[3px] ${statusBorder} ${selectedIds.has(f.id) ? 'ring-2 ring-inset ring-amber-400' : ''} ${hoverBg} transition-[filter]`}>
                     <td className="border border-neutral-900 px-2 py-0.5 align-middle"><input type="checkbox" checked={selectedIds.has(f.id)} onChange={() => onToggleSelect(f.id)} className="accent-amber-500 cursor-pointer" /></td>
                     <td className="border border-neutral-900 px-1 py-0.5 align-middle">
                       {f.private && <span title="Private"><Skull size={11} className="text-red-500" /></span>}
                     </td>
                     <td className={`border border-neutral-900 px-2 py-0.5 align-middle ${mutedText}`}>{formatDate(f.dateAdded)}</td>
-                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'charterers', f.charterers || '--', baseText, tone)}</td>
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'charterers', f.charterers || '--', chartererCellBase, tone)}</td>
                     <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'qty', f.qty || '--', mutedText, tone)}</td>
                     <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'grade', f.grade || '--', mutedText, tone)}</td>
                     <td className="border border-neutral-900 px-2 py-0.5 align-middle">
@@ -350,15 +409,15 @@ export default function FixturesTable({
                           const vo = anagrafiche.vesselOwners.find(v => v.vesselName === f.vessel);
                           if (!f.vessel || !vo) return null;
                           return (
-                            <div className={`hidden group-hover:block absolute left-0 top-full mt-1 z-30 border rounded px-2 py-1 text-[10px] whitespace-nowrap ${isDark ? 'bg-gray-900 border-gray-600 text-gray-200' : 'bg-white border-slate-200 text-slate-700'}`}>
-                              OWNER: {vo.owner || '--'} | DWT: {vo.dwt || '--'} | YOB: {vo.yob || '--'}
+                            <div className={`hidden group-hover:block absolute left-0 top-full mt-1 z-50 border border-neutral-800 rounded px-2 py-1 text-[10px] whitespace-nowrap opacity-100 shadow-2xl ${isDark ? 'bg-gray-950 text-gray-100' : 'bg-gray-950 text-gray-100'}`}>
+                              OWNER: {vo.owner || '--'} | DWT: {vo.dwt || '--'} | BUILT: {vo.yob || '--'}
                             </div>
                           );
                         })()}
                       </div>
                     </td>
                     <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'rate', f.rate || '--', rateText, tone)}</td>
-                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'status', f.status || '--', statusTone, tone)}</td>
+                    <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'status', f.status || '--', statusBadge, tone)}</td>
                     <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'dem', f.dem || '--', mutedText, tone)}</td>
                     <td className="border border-neutral-900 px-2 py-0.5 align-middle">{renderCell(f, 'comments', f.comments || '--', mutedText, tone)}</td>
                     {showAreaCol && <td className={`border border-neutral-900 px-2 py-0.5 align-middle ${mutedText}`}>{f.area}</td>}
@@ -412,7 +471,7 @@ export default function FixturesTable({
           <h3 className={`font-semibold text-sm mb-2 ${isDark ? 'text-amber-500' : 'text-amber-600'}`}>VESSEL METADATA</h3>
           <input value={vesselPopup.owner} onChange={e => setVesselPopup(prev => prev ? { ...prev, owner: e.target.value.toUpperCase() } : prev)} onKeyDown={e => e.key === 'Enter' && (onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob), setVesselPopup(null))} placeholder="Owner" className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-3 py-2 text-xs w-full mb-2 rounded`} autoFocus={!vesselPopup.owner} />
           <input value={vesselPopup.dwt} onChange={e => setVesselPopup(prev => prev ? { ...prev, dwt: e.target.value.replace(/[^0-9]/g, '') } : prev)} onKeyDown={e => e.key === 'Enter' && (onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob), setVesselPopup(null))} placeholder="DWT" className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-3 py-2 text-xs w-full mb-2 rounded`} autoFocus={!!vesselPopup.owner && !vesselPopup.dwt} />
-          <input value={vesselPopup.yob} onChange={e => setVesselPopup(prev => prev ? { ...prev, yob: e.target.value.replace(/[^0-9]/g, '').slice(0, 4) } : prev)} onKeyDown={e => e.key === 'Enter' && (onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob), setVesselPopup(null))} placeholder="YOB" className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-3 py-2 text-xs w-full mb-4 rounded`} autoFocus={!!vesselPopup.owner && !!vesselPopup.dwt && !vesselPopup.yob} />
+          <input value={vesselPopup.yob} onChange={e => setVesselPopup(prev => prev ? { ...prev, yob: e.target.value.replace(/[^0-9]/g, '').slice(0, 4) } : prev)} onKeyDown={e => e.key === 'Enter' && (onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob), setVesselPopup(null))} placeholder="BUILT" className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-3 py-2 text-xs w-full mb-4 rounded`} autoFocus={!!vesselPopup.owner && !!vesselPopup.dwt && !vesselPopup.yob} />
           <div className="flex gap-2">
             <button onClick={() => { onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob); setVesselPopup(null); }} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 text-xs rounded-sm">SAVE</button>
             <button onClick={() => setVesselPopup(null)} className={`${isDark ? 'text-gray-500 border-gray-600' : 'text-slate-500 border-slate-200'} px-4 py-2 text-xs border rounded-sm`}>CANCEL</button>
@@ -439,12 +498,3 @@ export default function FixturesTable({
   );
 }
 
-function groupByWeek(fixtures: Fixture[]): { week: string; fixtures: Fixture[] }[] {
-  const map = new Map<string, Fixture[]>();
-  for (const f of fixtures) {
-    const week = getISOWeek(f.dateAdded);
-    if (!map.has(week)) map.set(week, []);
-    map.get(week)!.push(f);
-  }
-  return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([week, fixtures]) => ({ week, fixtures }));
-}

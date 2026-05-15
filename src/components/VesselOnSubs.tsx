@@ -23,7 +23,7 @@ interface VesselOnSubsProps {
 
 type GroupMode = 'dwt' | 'area' | 'date';
 
-const DWT_ORDER: DwtCategory[] = ['AFRAMAX', 'SUEZMAX', 'VLCC'];
+const DWT_ORDER: DwtCategory[] = ['SMALL', 'HANDY', 'PANAMAX', 'AFRAMAX', 'SUEZMAX', 'VLCC'];
 
 export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, onUpsertVesselMetadata, onUpsertPortArea, onSubsRowAdded, onSubsRowRemoved, onSubsExpired, onSyncNow, onClose }: VesselOnSubsProps) {
   const [groupMode, setGroupMode] = useState<GroupMode>('date');
@@ -115,7 +115,7 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
   }
 
   const groupedByDwt = useMemo(() => {
-    const groups: Record<string, VesselOnSubsEntry[]> = { AFRAMAX: [], SUEZMAX: [], VLCC: [], OTHER: [] };
+    const groups: Record<string, VesselOnSubsEntry[]> = { SMALL: [], HANDY: [], PANAMAX: [], AFRAMAX: [], SUEZMAX: [], VLCC: [], OTHER: [] };
     for (const f of entries) {
       const dwt = anagrafiche.vesselOwners.find(v => v.vesselName === f.vessel)?.dwt || '';
       const cat = getDwtCategory(dwt) || 'OTHER';
@@ -160,7 +160,7 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
     }
 
     if (groupMode === 'dwt') {
-      const groups: Record<string, VesselOnSubsEntry[]> = { AFRAMAX: [], SUEZMAX: [], VLCC: [], OTHER: [] };
+      const groups: Record<string, VesselOnSubsEntry[]> = { SMALL: [], HANDY: [], PANAMAX: [], AFRAMAX: [], SUEZMAX: [], VLCC: [], OTHER: [] };
       for (const f of currentEntries) {
         const dwt = anagrafiche.vesselOwners.find(v => v.vesselName === f.vessel)?.dwt || '';
         const cat = getDwtCategory(dwt) || 'OTHER';
@@ -426,7 +426,7 @@ export default function VesselOnSubs({ anagrafiche, entries, onChangeEntries, on
               <h3 className={`font-semibold text-sm mb-2 ${isDark ? 'text-amber-500' : 'text-amber-600'}`}>VESSEL METADATA</h3>
               <input value={vesselPopup.owner} onChange={e => setVesselPopup(prev => prev ? { ...prev, owner: e.target.value.toUpperCase() } : prev)} onKeyDown={e => e.key === 'Enter' && (onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob), setVesselPopup(null))} placeholder="Owner" className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-3 py-2 text-xs w-full mb-2 rounded`} autoFocus={!vesselPopup.owner} />
               <input value={vesselPopup.dwt} onChange={e => setVesselPopup(prev => prev ? { ...prev, dwt: e.target.value.replace(/[^0-9]/g, '') } : prev)} onKeyDown={e => e.key === 'Enter' && (onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob), setVesselPopup(null))} placeholder="DWT" className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-3 py-2 text-xs w-full mb-2 rounded`} autoFocus={!!vesselPopup.owner && !vesselPopup.dwt} />
-              <input value={vesselPopup.yob} onChange={e => setVesselPopup(prev => prev ? { ...prev, yob: e.target.value.replace(/[^0-9]/g, '').slice(0, 4) } : prev)} onKeyDown={e => e.key === 'Enter' && (onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob), setVesselPopup(null))} placeholder="YOB" className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-3 py-2 text-xs w-full mb-4 rounded`} autoFocus={!!vesselPopup.owner && !!vesselPopup.dwt && !vesselPopup.yob} />
+              <input value={vesselPopup.yob} onChange={e => setVesselPopup(prev => prev ? { ...prev, yob: e.target.value.replace(/[^0-9]/g, '').slice(0, 4) } : prev)} onKeyDown={e => e.key === 'Enter' && (onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob), setVesselPopup(null))} placeholder="BUILT" className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-100' : 'bg-slate-50 border-slate-300 text-slate-800'} border px-3 py-2 text-xs w-full mb-4 rounded`} autoFocus={!!vesselPopup.owner && !!vesselPopup.dwt && !vesselPopup.yob} />
               <div className="flex gap-2">
                 <button onClick={() => { onUpsertVesselMetadata(vesselPopup.vessel, vesselPopup.owner, vesselPopup.dwt, vesselPopup.yob); setVesselPopup(null); onSyncNow?.(); }} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 text-xs rounded-sm">SAVE</button>
                 <button onClick={() => setVesselPopup(null)} className={`${isDark ? 'text-gray-500 border-gray-600' : 'text-slate-500 border-slate-200'} px-4 py-2 text-xs border rounded-sm`}>CANCEL</button>

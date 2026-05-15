@@ -3,14 +3,13 @@ import type { Fixture, Anagrafiche, Area, SyncData, FieldEdit, VesselOnSubsEntry
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useTheme } from './hooks/useTheme';
 import { useSync } from './hooks/useSync';
-import { getDefaultPortMappings, detectArea, normalizePortKey, canonicalArea } from './utils/areaMapper';
+import { getDefaultPortMappings, detectArea, normalizePortKey, canonicalArea, ALL_AREAS } from './utils/areaMapper';
 import { normalizeMasterPortsList, normalizeMasterVesselsList, pickSafeAnagraficheFromServer } from './utils/sheetsSyncNormalize';
 import { fixturesForGoogleSheetSync, normalizeFixtureAfterPull } from './utils/fixtureSheetNormalize';
 import { uniqueSorted, generateId, todayISO } from './utils/helpers';
 import { slideSessionIfValid, tryUnlock, readDeviceOwner, LS_DEVICE_OWNER } from './utils/sessionAuth';
 import QuickAdd from './components/QuickAdd';
 import FixturesTable from './components/FixturesTable';
-import Sidebar from './components/Sidebar';
 import DataManagement from './components/DataManagement';
 import ExportModal from './components/ExportModal';
 import EditFixtureModal from './components/EditFixtureModal';
@@ -125,6 +124,7 @@ function App() {
   const [vesselsOnSubs, setVesselsOnSubs] = useLocalStorage<VesselOnSubsEntry[]>('ship-vessels-on-subs', []);
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchQueryBottom, setSearchQueryBottom] = useState('');
   const [showDataMgmt, setShowDataMgmt] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
@@ -580,8 +580,9 @@ function App() {
     if (field === 'status' && newValue === 'FAILED') {
       const original = (fixtures || []).find(f => f.id === fixtureId);
       if (original && original.status !== 'FAILED') {
+        const ts = Date.now();
         const edit: FieldEdit = { field: 'status', oldValue: original.status, newValue: 'FAILED', ...auditMeta() };
-        const failedRow: Fixture = { ...original, status: 'FAILED', editHistory: [...original.editHistory, edit] };
+        const failedRow: Fixture = { ...original, status: 'FAILED', editHistory: [...original.editHistory, edit], updatedAt: ts };
         const prevVessel = (original.vessel || '').trim();
         const failTail = prevVessel ? `FAILED ${prevVessel}` : 'FAILED';
         const cm = (original.comments || '').trim();
@@ -606,10 +607,13 @@ function App() {
           editHistory: [],
           archived: false,
           private: false,
+          updatedAt: ts + 1,
         };
         queueFixtureUpsert(fixtureId);
-        queueFixtureUpsert(copy.id);
+        // Defer the new OPEN row's POST so the FAILED upsert lands first (avoids duplicate row race on the sheet).
         setFixtures(prev => [copy, ...(prev || []).map(f => f.id === fixtureId ? failedRow : f)]);
+        window.setTimeout(() => queueFixtureUpsert(copy.id), 400);
+        updateAnagraficheFromFixture(copy);
         return;
       }
     }
@@ -622,7 +626,7 @@ function App() {
       const oldValue = (f as unknown as Record<string, unknown>)[field] as string;
       if (oldValue === newValue) return f;
       const edit: FieldEdit = { field, oldValue, newValue, ...auditMeta() };
-      const updated = { ...f, [field]: newValue, editHistory: [...f.editHistory, edit] };
+      const updated = { ...f, [field]: newValue, editHistory: [...f.editHistory, edit], updatedAt: Date.now() };
       if (field === 'charterers' && newValue) addCharterer(newValue);
       if (field === 'grade' && newValue) addGrade(newValue);
       if (field === 'vessel' && newValue) {
@@ -747,16 +751,71 @@ function App() {
         searchQuery={searchQuery} onSearchChange={setSearchQuery}
       />
 
-      <div className="flex flex-1 overflow-hidden relative">
-        <Sidebar selectedArea={selectedArea} onSelectArea={setSelectedArea} fixtureCounts={fixtureCounts} totalFixtures={(fixturesWithDynamicArea || []).filter(f => !f.archived && f.status !== 'FAILED').length} />
-        <FixturesTable
-          fixtures={fixturesWithDynamicArea} anagrafiche={anagrafiche} selectedArea={selectedArea} searchQuery={searchQuery}
-          onDelete={deleteFixture} onEdit={setEditingFixture} onInlineEdit={inlineEditFixture}
-          onTogglePrivate={togglePrivate} onRollover={rolloverFixture}
-          onUpsertVesselMetadata={upsertVesselMetadata}
-          onUpsertPortArea={upsertPortArea}
-          selectedIds={selectedIds} onToggleSelect={toggleSelect} onSelectAll={selectAll} onDeselectAll={deselectAll} maxWeeks={5}
-        />
+      <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="h-1/2 min-h-0 flex flex-col border-b border-neutral-900/10">
+          <div className={`px-4 py-2 flex items-center justify-between ${isDark ? 'border-b border-gray-800' : 'border-b border-slate-200'}`}>
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.25em] text-amber-500">TOP VIEW</div>
+              <div className="font-semibold text-sm">{selectedArea ? `Geographic Area: ${selectedArea}` : 'All geographic areas'}</div>
+            </div>
+            <div className="text-[10px] text-slate-400">{`${(fixturesWithDynamicArea || []).filter(f => !f.archived && f.status !== 'FAILED' && (!selectedArea || f.area === selectedArea)).length} visible fixtures`}</div>
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <FixturesTable
+              fixtures={fixturesWithDynamicArea} anagrafiche={anagrafiche} selectedArea={selectedArea} searchQuery={searchQuery}
+              onDelete={deleteFixture} onEdit={setEditingFixture} onInlineEdit={inlineEditFixture}
+              onTogglePrivate={togglePrivate} onRollover={rolloverFixture}
+              onUpsertVesselMetadata={upsertVesselMetadata} onUpsertPortArea={upsertPortArea}
+              selectedIds={selectedIds} onToggleSelect={toggleSelect} onSelectAll={selectAll} onDeselectAll={deselectAll} maxWeeks={5}
+              viewVariant="standard"
+            />
+          </div>
+        </div>
+
+        <div className="h-1/2 min-h-0 flex flex-col">
+          <div className={`px-4 py-2 flex flex-col gap-2 ${isDark ? 'border-b border-gray-800' : 'border-b border-slate-200'}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.25em] text-amber-500">BOTTOM VIEW</div>
+                <div className="font-semibold text-sm">Vessel-first overview</div>
+              </div>
+              <div className="text-[10px] text-slate-400">{`${(fixturesWithDynamicArea || []).filter(f => !f.archived && f.status !== 'FAILED' && (!selectedArea || f.area === selectedArea)).length} visible fixtures`}</div>
+            </div>
+            <div className="relative w-full max-w-xl">
+              <input
+                type="text"
+                value={searchQueryBottom}
+                onChange={e => setSearchQueryBottom(e.target.value)}
+                placeholder="Search secondary view..."
+                className={`${isDark ? 'bg-gray-800 border-gray-600 text-gray-200' : 'bg-slate-50 border-slate-300 text-slate-800'} border w-full pl-3 pr-3 py-2 text-xs rounded-sm focus:outline-none focus:ring-2 focus:ring-amber-400`}
+              />
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <FixturesTable
+              fixtures={fixturesWithDynamicArea} anagrafiche={anagrafiche} selectedArea={selectedArea} searchQuery={searchQueryBottom}
+              onDelete={deleteFixture} onEdit={setEditingFixture} onInlineEdit={inlineEditFixture}
+              onTogglePrivate={togglePrivate} onRollover={rolloverFixture}
+              onUpsertVesselMetadata={upsertVesselMetadata} onUpsertPortArea={upsertPortArea}
+              selectedIds={selectedIds} onToggleSelect={toggleSelect} onSelectAll={selectAll} onDeselectAll={deselectAll} maxWeeks={5}
+              viewVariant="vessel"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className={`border-t ${isDark ? 'border-gray-800 bg-gray-950/80' : 'border-slate-200 bg-slate-50'} px-4 py-3 flex flex-wrap gap-2 items-center overflow-x-auto shrink-0`}>
+        <span className="text-[10px] uppercase tracking-[0.2em] text-amber-500">Geographic areas</span>
+        {ALL_AREAS.map(area => (
+          <button key={area} onClick={() => setSelectedArea(selectedArea === area ? null : area)} className={`px-3 py-1 text-[10px] rounded-sm transition-colors ${selectedArea === area ? 'bg-amber-600 text-white' : `${isDark ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-white text-slate-600 hover:bg-slate-100'}`} border border-neutral-900/10`}>
+            {area}
+          </button>
+        ))}
+        {selectedArea && (
+          <button onClick={() => setSelectedArea(null)} className="ml-auto px-3 py-1 text-[10px] rounded-sm bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors">
+            CLEAR AREA
+          </button>
+        )}
       </div>
 
       <footer className={`${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-slate-200'} border-t px-4 py-1 flex items-center justify-between shrink-0`}>

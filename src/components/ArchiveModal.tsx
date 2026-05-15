@@ -3,7 +3,7 @@ import type { Fixture, Anagrafiche, Area } from '../types';
 import { ALL_AREAS } from '../utils/areaMapper';
 import { formatDate, displayLaycan } from '../utils/laycanParser';
 import { matchesSearch } from '../utils/helpers';
-import { X, Search, RotateCcw, Trash2, CreditCard as Edit3, Filter, Skull } from 'lucide-react';
+import { X, Search, RotateCcw, Trash2, CreditCard as Edit3, Filter, Skull, Download } from 'lucide-react';
 
 interface ArchiveModalProps {
   fixtures: Fixture[];
@@ -150,6 +150,27 @@ export default function ArchiveModal({ fixtures, anagrafiche, onDelete, onEdit, 
     setStatusFilter(new Set());
   }
 
+  function csvEscape(value: string) {
+    const escaped = String(value ?? '').replace(/"/g, '""');
+    return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
+  }
+
+  function exportCsv() {
+    const headers = ['DATE', 'CHARTERERS', 'QTY', 'GRADE', 'LOAD PORT', 'DISCH PORT', 'LAYCAN', 'VESSEL', 'RATE', 'STATUS', 'DEM', 'COMMENTS', 'AREA'];
+    const csv = [headers, ...sorted.map(f => [
+      f.dateAdded, f.charterers, f.qty, f.grade, f.loadPort, f.dischargePort, f.laycan, f.vessel, f.rate, f.status, f.dem, f.comments, f.area,
+    ])]
+      .map(row => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `archive-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   const hasActiveFilters = areaFilter.size > 0 || portFilter.trim() || qtyMin.trim() || qtyMax.trim() || dateFrom || dateTo || laycanFrom || laycanTo || statusFilter.size > 0;
 
   const isDark = document.documentElement.classList.contains('dark');
@@ -168,6 +189,9 @@ export default function ArchiveModal({ fixtures, anagrafiche, onDelete, onEdit, 
                 <RotateCcw size={12} /> CARRY FORWARD ({selectedIds.size})
               </button>
             )}
+            <button onClick={exportCsv} className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 text-xs font-semibold transition-colors rounded-sm">
+              <Download size={12} /> EXPORT CSV
+            </button>
             <button onClick={onClose} className={`${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-slate-400 hover:text-slate-600'}`}><X size={16} /></button>
           </div>
         </div>
